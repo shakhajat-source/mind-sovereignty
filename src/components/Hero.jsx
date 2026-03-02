@@ -17,7 +17,7 @@ export default function Hero({ onOpenQuiz }) {
 
       {/* ── Content layer ─────────────────────────────────────────────────── */}
       <div className="relative z-20 text-center px-6 max-w-5xl mx-auto">
-        <h1 className="font-nunito font-black text-5xl md:text-7xl lg:text-8xl text-white leading-[0.9] tracking-tight drop-shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
+        <h1 className="font-nunito font-black text-4xl md:text-6xl lg:text-7xl text-white leading-[0.9] tracking-tight drop-shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
           Reclaim your focus.<br />
           Break the habit.<br />
           Own your life.
