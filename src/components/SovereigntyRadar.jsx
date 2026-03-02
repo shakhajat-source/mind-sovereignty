@@ -1,0 +1,103 @@
+import {
+  RadarChart,
+  Radar,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  ResponsiveContainer,
+  Tooltip,
+} from 'recharts'
+import { PILLAR_SHORT } from '../lib/scores'
+
+/* ── Custom tooltip ────────────────────────────────────────────────────────── */
+function CustomTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null
+  const { subject, value } = payload[0].payload
+  return (
+    <div className="bg-charcoal text-white text-xs font-sans font-light px-3 py-2 shadow-lg">
+      <span className="font-semibold">{subject}</span>
+      <span className="ml-2 font-mono">{value}</span>
+    </div>
+  )
+}
+
+/* ── Custom axis tick ──────────────────────────────────────────────────────── */
+function AxisTick({ x, y, payload }) {
+  return (
+    <text
+      x={x}
+      y={y}
+      textAnchor="middle"
+      dominantBaseline="central"
+      style={{
+        fontSize: '11px',
+        fontFamily: 'Inter, system-ui, sans-serif',
+        fill: 'rgba(44,44,44,0.50)',
+        fontWeight: 400,
+      }}
+    >
+      {payload.value}
+    </text>
+  )
+}
+
+/* ── Main component ────────────────────────────────────────────────────────── */
+export default function SovereigntyRadar({ scores }) {
+  if (!scores) return null
+
+  const data = [
+    { subject: PILLAR_SHORT.focus_endurance,     value: scores.focus_endurance     },
+    { subject: PILLAR_SHORT.digital_autonomy,    value: scores.digital_autonomy    },
+    { subject: PILLAR_SHORT.boundary_integrity,  value: scores.boundary_integrity  },
+    { subject: PILLAR_SHORT.emotional_stability, value: scores.emotional_stability },
+    { subject: PILLAR_SHORT.utility_efficiency,  value: scores.utility_efficiency  },
+  ]
+
+  return (
+    <div className="space-y-4">
+      <ResponsiveContainer width="100%" height={280}>
+        <RadarChart cx="50%" cy="50%" outerRadius="72%" data={data}>
+          <PolarGrid
+            gridType="polygon"
+            stroke="rgba(44,44,44,0.08)"
+          />
+          <PolarAngleAxis
+            dataKey="subject"
+            tick={<AxisTick />}
+            axisLine={false}
+            tickLine={false}
+          />
+          <PolarRadiusAxis
+            domain={[0, 100]}
+            tickCount={5}
+            tick={false}
+            axisLine={false}
+          />
+          <Radar
+            dataKey="value"
+            stroke="#5c8260"
+            fill="#5c8260"
+            fillOpacity={0.18}
+            strokeWidth={1.5}
+            dot={{ r: 3, fill: '#5c8260', strokeWidth: 0 }}
+          />
+          <Tooltip content={<CustomTooltip />} />
+        </RadarChart>
+      </ResponsiveContainer>
+
+      {/* Score pills below chart */}
+      <div className="grid grid-cols-5 gap-1.5 text-center">
+        {data.map(({ subject, value }) => (
+          <div key={subject} className="space-y-0.5">
+            <div className="text-base font-display font-bold text-charcoal">
+              {value}
+            </div>
+            <div className="text-[10px] text-charcoal/35 font-sans font-light leading-tight">
+              {subject}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
