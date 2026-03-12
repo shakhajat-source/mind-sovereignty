@@ -1,4 +1,4 @@
-import heroImg from '../assets/hero-sunset.jpg'
+import heroImg from '../assets/hero-sunset.jpg.png'
 
 export default function Hero({ onOpenQuiz }) {
   return (

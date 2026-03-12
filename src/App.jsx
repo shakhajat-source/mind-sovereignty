@@ -37,27 +37,40 @@ export default function App() {
                     <p className="text-base text-neutral-800 font-light leading-relaxed">
                       The modern smartphone is the most successful attention-capture device ever
                       built. Behind every infinite scroll is a multi-billion dollar architecture
-                      engineered to keep you there longer than you intended. You aren't failing;
-                      the system is working exactly as designed.
+                      engineered to keep you there longer than you intended. When you spend too
+                      much time on your phone, you aren't failing; the system is working exactly
+                      as designed.
                     </p>
                     <p className="text-base text-neutral-800 font-light leading-relaxed">
                       High daily screen time is not a lack of discipline — it is the logical
-                      outcome of an uneven fight. But the consequences are real: fractured focus,
-                      eroded sleep and lack of time to pursue the things that really fulfil us in
-                      life. We don't care about your screen time "score." We care about the cost
-                      of that time.
+                      outcome of an uneven fight. Our brains weren't made for such
+                      over-saturation and the consequences are real: fractured focus, eroded
+                      sleep, and a lack of time to pursue the things that really fulfill us in
+                      life.
                     </p>
                     <p className="text-base text-neutral-800 font-light leading-relaxed">
-                      <strong className="font-bold text-neutral-900">
-                        Mind Sovereignty helps you keep your phone in check.
-                      </strong>{' '}
-                      We provide the science-backed protocols and personalised diagnostics needed
-                      to dismantle these digital loops and return your focus to where it belongs.
-                      Through our roadmap, we help you understand your unique digital triggers and
-                      systematically build the friction needed to break free.{' '}
+                      We suspect you already know most of this, and that you have real-life
+                      experience of those consequences. So when the richest companies in the
+                      world have the greatest minds working to keep you addicted to your phone,
+                      realistically, what can you actually do about it?
+                    </p>
+                    <p className="text-base text-neutral-800 font-light leading-relaxed">
+                      That's where Mind Sovereignty comes in. We help you keep your phone in
+                      check. We don't just care about your screen time; we care about the impact
+                      of that time and how we can help you build a healthier relationship with
+                      your phone. We provide the science-backed protocols and personalized
+                      diagnostics needed to dismantle these digital loops and return your focus
+                      to where it belongs. Through our roadmap, we help you understand your
+                      unique digital triggers and systematically build the friction needed to
+                      break free.{' '}
                       <strong className="font-extrabold text-neutral-900">
                         Not through willpower. Through strategy.
                       </strong>
+                    </p>
+                    <p className="text-base text-neutral-800 font-light leading-relaxed">
+                      We won't pretend it'll be easy, but there is one big advantage we have
+                      against these tech forces: real life—for all its flaws and hiccups—is
+                      simply better than the scroll.
                     </p>
                   </div>
 
