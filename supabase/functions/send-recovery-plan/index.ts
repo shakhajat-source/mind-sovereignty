@@ -1,318 +1,545 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { PDFDocument, StandardFonts, rgb } from 'npm:pdf-lib@1.17.1'
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-/* ── Archetype display names ─────────────────────────────────────────────── */
+/* ── Display maps ─────────────────────────────────────────────────────────── */
 const ARCHETYPE_NAME: Record<string, string> = {
   hyper_vigilant:    'The Hyper-Vigilant',
   numb_scroller:     'The Numb Scroller',
   stimulation_junkie:'The Stimulation Junkie',
   validation_chaser: 'The Validation Chaser',
   restless_operator: 'The Restless Operator',
-  // Legacy fallbacks
-  work_admin:   'The Productive Procrastinator',
-  social_doom:  'The Passive Consumer',
-  own_social:   'The Social Validator',
-  games_videos: 'The Escape Artist',
-  utility:      'The Utility User',
-  fomo:         'The FOMO Reactor',
+  // Legacy
+  work_admin: 'The Productive Procrastinator', social_doom: 'The Passive Consumer',
+  own_social: 'The Social Validator', games_videos: 'The Escape Artist',
+  utility: 'The Utility User', fomo: 'The FOMO Reactor',
 }
 
-/* ── Leakage bar labels ──────────────────────────────────────────────────── */
 const LEAKAGE_LABELS: Record<string, string> = {
-  stimulation: 'Stimulation Tax',
-  vigilance:   'Vigilance Tax',
-  avoidance:   'Avoidance Tax',
+  stimulation: 'Stimulation Tax', vigilance: 'Vigilance Tax', avoidance: 'Avoidance Tax',
 }
 
-/* ── Usage hours display ─────────────────────────────────────────────────── */
+const HOURS_MAP: Record<string, number> = {
+  '0to2': 1, '2to4': 3, '4to6': 5, '6to8': 7, '8to10': 9, 'gt10': 11,
+  lt2: 1, gt8: 9, not_sure: 5,
+}
+const PCT_MAP: Record<string, number> = {
+  '10to20': 15, '20to30': 25, '30to40': 35, gt40: 45, not_sure: 25,
+}
 const HOURS_LABEL: Record<string, string> = {
   '0to2': '0–2 hours', '2to4': '2–4 hours', '4to6': '4–6 hours',
-  '6to8': '6–8 hours', '8to10': '8–10 hours', 'gt10': '10+ hours',
+  '6to8': '6–8 hours', '8to10': '8–10 hours', gt10: '10+ hours',
+}
+const Q5_LABEL: Record<string, string> = {
+  mild: 'Mild', moderate: 'Moderate', severe: 'Severe', crisis: 'Crisis',
 }
 
-/* ── Leakage bars HTML ───────────────────────────────────────────────────── */
+/* ── Hobby tips ───────────────────────────────────────────────────────────── */
+function getHobbyTips(interests: string): string[] {
+  const t = interests.toLowerCase()
+  if (/read|book|novel/.test(t)) return [
+    'Start with 15-minute sessions rather than forcing hour-long reads — this rebuilds the focus muscle gradually.',
+    'Keep a physical book on your pillow or beside your bed as a visual cue to replace the phone-before-sleep habit.',
+    'Join a local book club or reading group to add social accountability and a recurring in-person commitment.',
+  ]
+  if (/guitar|piano|music|instrument|sing/.test(t)) return [
+    'Schedule a specific daily practice window — even 10 minutes. Consistency matters more than length.',
+    'Place your instrument visibly in your living space, not in a case, so it invites you rather than requiring effort.',
+    'Record yourself once a week. Hearing your own progress is one of the most powerful motivators for continued practice.',
+  ]
+  if (/paint|draw|art|sketch|creat/.test(t)) return [
+    'Keep your materials out and accessible. The friction of setting up is the biggest barrier — remove it.',
+    'Set a timer for 20 minutes and commit only to that. You\'ll often continue naturally past the alarm.',
+    'Use your phone\'s camera as a reference tool only: photograph subjects, then put it face-down.',
+  ]
+  if (/walk|run|hike|exercise|gym|sport|yoga/.test(t)) return [
+    'Go phone-free or use a simple watch for timing. Absence of the screen makes movement feel restorative rather than stimulating.',
+    'Build a consistent daily window — morning movement before checking your phone is particularly powerful for cortisol regulation.',
+    'Use the time as deliberate thinking space. Bring a problem you\'ve been stuck on and let your mind work without input.',
+  ]
+  if (/cook|bak|food|recipe/.test(t)) return [
+    'Cook from a physical cookbook rather than your phone screen — the constraint forces full engagement with the recipe.',
+    'Schedule one experimental cook per week where you improvise. This builds genuine skill and keeps the practice stimulating.',
+    'Invite someone to share the meal. Cooking for others transforms a solo activity into a social anchor.',
+  ]
+  if (/writ|journal|diary/.test(t)) return [
+    'Use a physical notebook rather than a digital app. The tactile act of writing by hand is itself a form of decompression.',
+    'Write freely for 10 minutes without editing. Volume over quality builds the habit; perfectionism kills it.',
+    'Keep your journal where your phone usually lives. The location cue redirects the reach-reflex naturally.',
+  ]
+  return [
+    'Start with the smallest possible version — even 10 minutes. The goal is to build the neural pathway, not achieve mastery.',
+    'Place a physical reminder of your hobby where your phone usually lives. Environmental design beats willpower every time.',
+    'Tell one person specifically that you are taking this up. Social commitment dramatically increases follow-through.',
+  ]
+}
+
+/* ── Archetype loop copy ─────────────────────────────────────────────────── */
+const LOOP_COPY: Record<string, string> = {
+  hyper_vigilant: `Your results indicate you are caught in the Vigilance Loop. The human nervous system is biologically wired to monitor for threats. When you constantly check the news cycle or remain tethered to work emails after hours, you are signalling to your brain that you are under threat. This prevents your cortisol (stress hormone) levels from dropping. You aren't just 'staying informed' or 'being a dedicated worker' — you are forcing your brain into a state of chronic hyper-vigilance. To fix this, your 4-week plan will implement a strict 'Digital Finish Line' to physically separate you from the threat-detection machine.`,
+  numb_scroller: `You are using your device to enter what tech designers call the 'Machine Zone' — a frictionless trance where time disappears and real-world pressures are muted. Reaching for your phone when bored, anxious, or procrastinating is an attempt to soothe your nervous system. However, this is an illusion; it simply pauses the discomfort. When you put the phone down, the anxiety returns, often amplified by a dopamine crash. In Week 2, we will introduce friction. By practising 'Compassionate Observation' — sitting with the urge for 60 seconds without acting on it or judging yourself — you will strip this automatic response of its power.`,
+  stimulation_junkie: `Your results point to a hijacked dopamine baseline. Modern apps are designed like slot machines, feeding you unpredictable hits of high-velocity novelty. Because your brain is flooded with easy stimulation, it has down-regulated its own dopamine receptors to protect itself. This is why analog activities — reading, working, or just sitting still — now feel painfully slow or 'boring'. You require a period of Baseline Recalibration. By completely abstaining from your most stimulating apps for 14 days, your receptors will regrow, and your capacity to enjoy normal, everyday life will return.`,
+  validation_chaser: `Your phone usage is heavily tied to social survival instincts. Humans evolved to care deeply about their standing in the tribe; social media platforms weaponize this biology through intermittent reinforcement. You never know when the likes, messages, or comments will arrive, creating a compulsive checking loop driven by the fear of missing out or social exclusion. Texting provides a drip-feed of connection without the neurological benefits of a real voice or face. Your plan will shift you from passive checking to intentional, batched connection — upgrading the quality of your interactions so you no longer crave the digital quantity.`,
+  restless_operator: `Sometimes addiction isn't about the content; it's about the physical habit. Your results show you are using the device as a physical pacifier to provide background noise or occupy restless hands. Having a screen flashing in your peripheral vision quietly drains your cognitive energy and incurs a Switch-Cost Penalty on your brain, even if you aren't actively looking at it. Over the next 4 weeks, we will separate the audio from the screen (using radios or speakers) and give your hands a non-digital replacement, like a notebook or worry stone, allowing your visual cortex to finally rest.`,
+}
+
+/* ── Social copy ─────────────────────────────────────────────────────────── */
+const SOCIAL_COPY: Record<string, string> = {
+  rarely:      `Your data suggests limited in-person social contact may be amplifying your phone dependency. Digital connection creates the appearance of company without its neurological benefits. Physical co-presence triggers entirely different neurochemical pathways than a text exchange. Your plan includes one concrete step: identify a recurring in-person commitment — a class, a club, a standing dinner — and lock it in before Phase 1 begins. Even one meaningful in-person interaction per week can significantly reduce the emotional gap that drives compulsive scrolling.`,
+  once_week:   `You have a functional social foundation. The next step is enriching what you already have. Ask your existing contacts explicitly to try phone-free time together — most people feel the same but haven't said it. A phone-free dinner once a week with people you care about is one of the most reliable antidotes to the checking loop.`,
+  '2to3_week': `You have a solid social baseline — use it. The work here is to deepen rather than expand. Fewer screens, more presence. Suggest activities that don't centre on scrolling: walks, cooking together, a sport. The quality of your existing in-person time will increase substantially as your phone's grip loosens.`,
+  too_busy:    `A packed schedule is one of the most common rationalisations for emotional isolation. Consider whether 'too busy' is genuinely true, or whether it has become a comfortable buffer. One protected social commitment per week, treated like an unmovable appointment, is enough to begin rebuilding the human connection that makes real life more compelling than the scroll.`,
+  online_only: `Your social life being primarily online is one of the most significant risk factors for escalating phone dependency. Online interaction, however meaningful, does not provide the full neurological benefits of physical co-presence. Your plan includes a strong recommendation: identify one recurring in-person activity over the next 4 weeks — a class, a team, a volunteering commitment — and commit to it for the duration. This single change is likely to have an outsized effect on your baseline wellbeing.`,
+}
+
+/* ── Severity / impact copy ───────────────────────────────────────────────── */
+const SEVERITY_COPY: Record<string, string> = {
+  mild:     'You identified your usage as Mild. You are aware of the pattern but it has not yet caused significant disruption. You are ahead of most people in recognising this early — and the earlier the intervention, the easier the reset.',
+  moderate: 'You identified your usage as Moderate, noting a noticeable daily impact. This is the most common profile and, crucially, the most responsive to the structured approach in your plan. You have not left this too late.',
+  severe:   'You identified your usage as Severe — a real problem that needs addressing. Your honesty here is the first act of sovereignty. Severe patterns respond strongly to the Baseline Recalibration approach in your plan.',
+  crisis:   'You identified your usage as Crisis level. This level of honesty requires courage. Your plan prioritises the most impactful structural interventions and we strongly encourage you to supplement this with real-world support.',
+}
+const IMPACT_COPY: Record<string, string> = {
+  sleep:     'The primary area you have identified as neglected is sleep. Disrupted sleep is the fastest route to accelerated cognitive decline. Every night of poor sleep compounds the attention deficit and weakens your resilience to the next day\'s urge to scroll.',
+  focus:     'The primary area you have identified as neglected is your ability to focus on deep work. Fragmented focus is not a personality trait — it is a trained response to constant interruption. The good news is that it can be retrained.',
+  attention: 'The primary area you have identified as neglected is your attention span and reading ability. The capacity to sustain deep reading is one of the first things phone dependency erodes — and one of the first things to return when you reset.',
+  relations: 'The primary area you have identified as neglected is your relationships. Phone use in social settings is one of the most reliable predictors of relationship dissatisfaction. Your plan specifically targets the patterns displacing real human presence.',
+  fitness:   'The primary area you have identified as neglected is physical health. Sedentary phone time doesn\'t just displace activity — it displaces the mental state that motivates movement. As your phone usage reduces, energy and motivation return naturally.',
+  not_sure:  'You identified impact across multiple areas of your life. Widespread impact is a signal of a systemic problem, not an isolated one. Your plan addresses the root mechanism rather than treating each area separately.',
+}
+const ATTENTION_COPY: Record<string, string> = {
+  flow_state:   'Your reported attention profile shows strong focus endurance — you can enter deep work states without significant disruption. Your plan focuses on protecting and extending this capacity rather than rebuilding it.',
+  check_once:   'You reported checking your phone occasionally during focused work but completing the task. This is a recoverable pattern. Even brief checks carry a cognitive switch-cost that fragments the quality of your output over time.',
+  switch_tasks: 'You reported frequently switching between tasks before completing them. This reflects what researchers call attention residue — the mental remnant of the previous task clinging to your working memory. Your plan targets this directly.',
+  pulled_away:  'You reported that notifications and external sounds completely derail your concentration. This level of distraction sensitivity indicates your brain\'s default mode has been recalibrated toward interruption. Notification silencing and focus blocks are prioritised in your plan.',
+  cant_refocus: 'You reported spending more time trying to regain concentration than actually working. This re-entry problem is the most severe form of attentional fragmentation and is strongly associated with heavy dopamine stimulation. Your Baseline Recalibration period is particularly important.',
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PDF GENERATION
+═══════════════════════════════════════════════════════════════════════════ */
+async function buildPDF(
+  profileType: string,
+  _scores:     Record<string, number>,
+  auditData:   Record<string, string>,
+): Promise<Uint8Array> {
+  const doc  = await PDFDocument.create()
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold)
+  const reg  = await doc.embedFont(StandardFonts.Helvetica)
+
+  // Colours
+  const charcoal  = rgb(0.173, 0.173, 0.173)
+  const green     = rgb(0.361, 0.510, 0.376)
+  const midGray   = rgb(0.45,  0.45,  0.45)
+  const lightGray = rgb(0.75,  0.75,  0.75)
+
+  // Page constants
+  const PW = 595.28, PH = 841.89
+  const ML = 60, MR = 60, MT = 70, MB = 60
+  const CW = PW - ML - MR   // 475.28
+
+  // Mutable layout state
+  let page = doc.addPage([PW, PH])
+  let y    = PH - MT
+
+  function newPage() {
+    page = doc.addPage([PW, PH])
+    y    = PH - MT
+  }
+  function checkSpace(needed: number) {
+    if (y - needed < MB) newPage()
+  }
+
+  // Draw a string with word-wrap, returns nothing (mutates y)
+  function block(
+    text: string,
+    font: typeof bold,
+    size: number,
+    color: ReturnType<typeof rgb>,
+    indent = 0,
+    lhMult = 1.55,
+  ) {
+    const lh   = size * lhMult
+    const maxW = CW - indent
+    const words = text.split(/\s+/).filter(Boolean)
+    let line = ''
+
+    for (const word of words) {
+      const test = line ? `${line} ${word}` : word
+      if (font.widthOfTextAtSize(test, size) > maxW && line) {
+        checkSpace(lh)
+        page.drawText(line, { x: ML + indent, y, size, font, color })
+        y -= lh
+        line = word
+      } else {
+        line = test
+      }
+    }
+    if (line) {
+      checkSpace(lh)
+      page.drawText(line, { x: ML + indent, y, size, font, color })
+      y -= lh
+    }
+  }
+
+  function gap(pts = 14) { y -= pts }
+
+  function rule(color: ReturnType<typeof rgb> = lightGray) {
+    page.drawLine({ start: { x: ML, y }, end: { x: PW - MR, y }, thickness: 0.5, color })
+    y -= 16
+  }
+
+  function sectionHead(label: string, num: string) {
+    checkSpace(44)
+    gap(10)
+    page.drawText(num, { x: ML, y, size: 8, font: reg, color: lightGray })
+    page.drawText(label.toUpperCase(), { x: ML + 22, y, size: 8, font: bold, color: green })
+    y -= 18
+    rule()
+  }
+
+  // ── Parse audit data ──────────────────────────────────────────────────────
+  const archetypeName  = ARCHETYPE_NAME[profileType] ?? 'Sovereignty Seeker'
+  const hoursNum       = HOURS_MAP[auditData.usageHours ?? ''] ?? 5
+  const pctNum         = PCT_MAP[auditData.unnecessaryPct ?? ''] ?? 25
+  const daysPerYear    = Math.round((hoursNum * 365) / 24)
+  const yearsLifespan  = Math.round((daysPerYear * 80) / 365)
+  const unnecessaryDays = Math.round((daysPerYear * pctNum) / 100)
+  const severity       = auditData.severity       ?? ''
+  const interests      = auditData.interests      ?? ''
+  const social         = auditData.socialConnection ?? ''
+  const morning        = auditData.morningUsage    ?? ''
+  const workProc       = auditData.workProcrastination ?? ''
+  const attentionSpan  = auditData.attentionSpan  ?? ''
+  const impactArea     = auditData.impactArea     ?? ''
+  const today          = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TITLE BLOCK
+  // ═══════════════════════════════════════════════════════════════════════════
+  page.drawText('MIND SOVEREIGNTY', { x: ML, y, size: 9, font: bold, color: green })
+  y -= 16
+  page.drawText('Digital Health Assessment', { x: ML, y, size: 22, font: bold, color: charcoal })
+  y -= 28
+  page.drawText(archetypeName, { x: ML, y, size: 13, font: reg, color: midGray })
+  y -= 14
+  page.drawText(today, { x: ML, y, size: 10, font: reg, color: lightGray })
+  y -= 24
+  rule(green)
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SECTION 1: THE REALITY CHECK
+  // ═══════════════════════════════════════════════════════════════════════════
+  sectionHead('The Reality Check', '01')
+
+  block(
+    `Your reported daily screen time is approximately ${hoursNum} hour${hoursNum !== 1 ? 's' : ''}. Over the course of a year, that translates to around ${daysPerYear} days — over ${Math.round(daysPerYear / 30)} full months — spent looking at your phone. Scaled across an 80-year lifespan, that is roughly ${yearsLifespan} year${yearsLifespan !== 1 ? 's' : ''}. This is not unusual. You sit in the broad middle of smartphone users in developed countries, and the system was designed to get you here.`,
+    reg, 10, charcoal,
+  )
+  gap()
+  block(
+    `Of that time, you estimated approximately ${pctNum}% — around ${unnecessaryDays} days per year — as unnecessary usage you'd like to recover. That is the specific target of the next 4 weeks. We are not asking you to quit your phone; we are asking you to reclaim those ${unnecessaryDays} days.`,
+    reg, 10, charcoal,
+  )
+
+  if (morning === 'agree') {
+    gap()
+    block(
+      `You noted that your phone is typically the first thing you reach for in the morning. This is significant: checking your phone before your prefrontal cortex has fully activated sets a neurological template for the rest of the day, priming the brain to expect constant stimulation. Your plan begins with addressing this single habit first.`,
+      reg, 10, charcoal,
+    )
+  }
+
+  if (workProc === 'agree') {
+    gap()
+    block(
+      `You also indicated spending at least one hour procrastinating on your phone during productive hours. This pattern is one of the highest-cost behaviours we address — every hour lost during peak cognitive hours costs not just that hour, but the momentum and flow state you could have built.`,
+      reg, 10, charcoal,
+    )
+  }
+
+  gap()
+  block(
+    `Over the next 4 weeks, our target is that ${pctNum}% of unnecessary usage. Not perfection — progress.`,
+    bold, 10, charcoal,
+  )
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SECTION 2: YOUR DIGITAL LOOP
+  // ═══════════════════════════════════════════════════════════════════════════
+  sectionHead('Your Digital Loop', '02')
+
+  block(
+    LOOP_COPY[profileType] ?? LOOP_COPY.restless_operator,
+    reg, 10, charcoal,
+  )
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SECTION 3: ARCHITECTURE OF HABIT
+  // ═══════════════════════════════════════════════════════════════════════════
+  sectionHead('Architecture of Habit', '03')
+
+  block(
+    `Addiction is deeply tied to environmental cues. Your phone usage almost certainly spikes in specific locations and at specific times — the same sofa, the same desk, the same moments of transition. These cues are not weaknesses; they are conditioned responses your brain has automated over years of repetition.`,
+    reg, 10, charcoal,
+  )
+  gap()
+  block(
+    `Your plan begins with one structural change: assigning your phone a dedicated 'home' in a room you don't use for rest or focused work. When you are in the bedroom, or at your desk, the phone is not there. This single environmental adjustment introduces the friction that willpower alone cannot sustain.`,
+    reg, 10, charcoal,
+  )
+  gap()
+  block(
+    `Reassurance: this is not a permanent ban. It is a 4-week protocol to reset the conditioned triggers that have been running on autopilot. After the plan, you will choose where it lives — but the loop will no longer be making that choice for you.`,
+    reg, 10, charcoal,
+  )
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SECTION 5: THE TURNING POINT
+  // ═══════════════════════════════════════════════════════════════════════════
+  sectionHead('The Turning Point', '05')
+
+  if (severity && SEVERITY_COPY[severity]) {
+    block(SEVERITY_COPY[severity], reg, 10, charcoal)
+    gap()
+  }
+  if (impactArea && IMPACT_COPY[impactArea]) {
+    block(IMPACT_COPY[impactArea], reg, 10, charcoal)
+    gap()
+  }
+  block(
+    `This is your baseline. At the end of Week 4, we use these same markers to measure your progress. Change is not always dramatic — but it is always measurable.`,
+    reg, 10, charcoal,
+  )
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SECTION 6: ATTENTION SPAN
+  // ═══════════════════════════════════════════════════════════════════════════
+  sectionHead('Your Attention Span', '06')
+
+  block(
+    attentionSpan && ATTENTION_COPY[attentionSpan]
+      ? ATTENTION_COPY[attentionSpan]
+      : `Your attention profile reflects the modern norm — an environment optimised for interruption, competing with a brain built for focus.`,
+    reg, 10, charcoal,
+  )
+  gap()
+  block(
+    `Every interruption carries a cognitive switch-cost. Studies show it takes the brain over 20 minutes to return to deep focus after a single distraction. If you check your phone three times during a work session, you may never reach genuine flow at all. The reassuring truth: your brain retains its neuroplasticity. The capacity for sustained reading, deep thinking, and creative flow can be rebuilt — typically within 2–4 weeks of reduced stimulation.`,
+    reg, 10, charcoal,
+  )
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SECTION 7: REPLACEMENT STRATEGY
+  // ═══════════════════════════════════════════════════════════════════════════
+  sectionHead('Your Replacement Strategy', '07')
+
+  block(
+    `You cannot simply 'stop' scrolling without a compelling alternative waiting. In the famous Rat Park experiment, rats placed in an enriched environment with social connection and stimulation voluntarily ignored addictive substances. Your chosen interest is your Rat Park.`,
+    reg, 10, charcoal,
+  )
+  gap()
+
+  if (interests) {
+    block(`You told us you'd like to use your recovered time on: ${interests}.`, bold, 10, charcoal)
+    gap()
+    block(
+      `This is not a trivial answer. Research consistently shows that the specificity of the replacement activity is one of the strongest predictors of successful habit change.`,
+      reg, 10, charcoal,
+    )
+    gap()
+
+    const tips = getHobbyTips(interests)
+    block('Three tailored suggestions for making this stick:', bold, 10, charcoal)
+    gap(8)
+    for (let i = 0; i < tips.length; i++) {
+      checkSpace(28)
+      block(`${i + 1}.  ${tips[i]}`, reg, 10, charcoal, 12)
+      gap(4)
+    }
+  } else {
+    block(
+      `When you identify your replacement activity, write it somewhere visible. The specificity of what you will do instead is one of the most important factors in successfully breaking a habit loop.`,
+      reg, 10, charcoal,
+    )
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SECTION 8: THE HUMAN ELEMENT
+  // ═══════════════════════════════════════════════════════════════════════════
+  sectionHead('The Human Element', '08')
+
+  block(
+    `"The opposite of addiction is not sobriety — it's connection."  — Johann Hari`,
+    bold, 10, charcoal,
+  )
+  gap()
+  block(
+    SOCIAL_COPY[social] ?? `Human connection remains the most powerful neurological antidote to compulsive digital behaviour. Whatever your current social situation, your plan will nudge you toward more intentional, phone-free presence with the people in your life.`,
+    reg, 10, charcoal,
+  )
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FOOTER (placed at absolute bottom of final page)
+  // ═══════════════════════════════════════════════════════════════════════════
+  const footerY = MB - 4
+  page.drawLine({ start: { x: ML, y: footerY + 12 }, end: { x: PW - MR, y: footerY + 12 }, thickness: 0.5, color: lightGray })
+  page.drawText(
+    `© ${new Date().getFullYear()} Mind Sovereignty  ·  Confidential Assessment  ·  mindsovereignty.com`,
+    { x: ML, y: footerY, size: 8, font: reg, color: lightGray },
+  )
+
+  return doc.save()
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   HTML EMAIL
+═══════════════════════════════════════════════════════════════════════════ */
 function leakageBars(scores: Record<string, number>): string {
-  const entries = Object.entries(scores).filter(([key]) => key in LEAKAGE_LABELS)
-
-  if (entries.length === 0) {
-    return `<tr><td style="font-size:12px;color:#aaa;font-family:Inter,sans-serif;">No leakage data available.</td></tr>`
-  }
-
-  const colours: Record<string, string> = {
-    stimulation: '#c17240',
-    vigilance:   '#5c7a8c',
-    avoidance:   '#8c6b5c',
-  }
-
-  return entries
-    .map(([key, rawVal]) => {
-      const val    = Math.min(100, Math.max(0, Number(rawVal) || 0))
-      const label  = LEAKAGE_LABELS[key]
-      const colour = colours[key] ?? '#888'
-      const barW   = Math.round(val * 1.8) // max 180px at 100
-
-      return `
-        <tr>
-          <td style="padding:5px 0;width:130px;font-size:12px;color:#888;
-                     font-family:Inter,sans-serif;vertical-align:middle;">${label}</td>
-          <td style="padding:5px 10px;vertical-align:middle;">
-            <div style="background:#eeece9;border-radius:2px;height:6px;width:180px;">
-              <div style="background:${colour};height:6px;width:${barW}px;border-radius:2px;"></div>
-            </div>
-          </td>
-          <td style="padding:5px 0;font-size:12px;font-family:'Courier New',monospace;
-                     color:#2c2c2c;width:32px;vertical-align:middle;">${val}</td>
-        </tr>`
-    })
-    .join('')
+  const entries = Object.entries(scores).filter(([k]) => k in LEAKAGE_LABELS)
+  if (!entries.length) return '<tr><td style="font-size:12px;color:#aaa;font-family:Inter,sans-serif;">No data.</td></tr>'
+  const colours: Record<string, string> = { stimulation: '#c17240', vigilance: '#5c7a8c', avoidance: '#8c6b5c' }
+  return entries.map(([key, rawVal]) => {
+    const val = Math.min(100, Math.max(0, Number(rawVal) || 0))
+    const barW = Math.round(val * 1.8)
+    return `<tr>
+      <td style="padding:5px 0;width:130px;font-size:12px;color:#888;font-family:Inter,sans-serif;vertical-align:middle;">${LEAKAGE_LABELS[key]}</td>
+      <td style="padding:5px 10px;vertical-align:middle;">
+        <div style="background:#eeece9;border-radius:2px;height:6px;width:180px;">
+          <div style="background:${colours[key] ?? '#888'};height:6px;width:${barW}px;border-radius:2px;"></div>
+        </div>
+      </td>
+      <td style="padding:5px 0;font-size:12px;font-family:'Courier New',monospace;color:#2c2c2c;width:32px;vertical-align:middle;">${val}</td>
+    </tr>`
+  }).join('')
 }
 
-/* ── Email template ───────────────────────────────────────────────────────── */
 function buildEmail(
-  toEmail:     string,
+  _toEmail:    string,
   profileType: string,
   scores:      Record<string, number>,
   auditData:   Record<string, string>,
 ): string {
   const archetypeName = ARCHETYPE_NAME[profileType] ?? 'Sovereignty Seeker'
-  const severity      = auditData?.severity   ?? ''
-  const interests     = auditData?.interests  ?? ''
+  const severity      = auditData?.severity  ?? ''
+  const interests     = auditData?.interests ?? ''
   const usageHours    = HOURS_LABEL[auditData?.usageHours ?? ''] ?? ''
   const year          = new Date().getFullYear()
 
-  const severityLine = severity
-    ? `You've identified a <strong>${severity}</strong> level of phone dependency.`
-    : ''
-  const interestsLine = interests
-    ? `You've told us you'd like to spend your extra time on: <em>${interests}</em>.`
-    : ''
-  const hoursLine = usageHours
-    ? `Your reported daily screen time is <strong>${usageHours}</strong>.`
-    : ''
+  const severityLine  = severity  ? `You've identified a <strong>${Q5_LABEL[severity] ?? severity}</strong> level of phone dependency. ` : ''
+  const interestsLine = interests ? `You've told us you'd like to spend your extra time on: <em>${interests}</em>. ` : ''
+  const hoursLine     = usageHours ? `Your reported daily screen time is <strong>${usageHours}</strong>. ` : ''
 
   return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Your Sovereignty Assessment &amp; 4-Week Roadmap</title>
-</head>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Your Sovereignty Assessment &amp; 4-Week Roadmap</title></head>
 <body style="margin:0;padding:0;background:#f2f0ed;font-family:Inter,system-ui,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f2f0ed;padding:40px 20px;">
-    <tr><td align="center">
-      <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;max-width:600px;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f2f0ed;padding:40px 20px;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="background:#fff;max-width:600px;">
 
-        <!-- Header -->
-        <tr>
-          <td style="padding:40px 48px 28px;border-bottom:1px solid #eeece9;">
-            <p style="margin:0 0 4px;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">
-              Mind Sovereignty
-            </p>
-            <h1 style="margin:0;font-size:26px;font-weight:900;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;line-height:1.15;">
-              Your Sovereignty Assessment &amp; 4-Week Roadmap
-            </h1>
-            <p style="margin:6px 0 0;font-size:13px;color:#5c8260;font-family:Inter,sans-serif;font-weight:500;">
-              ${archetypeName}
-            </p>
-          </td>
-        </tr>
+  <!-- Header -->
+  <tr><td style="padding:40px 48px 28px;border-bottom:1px solid #eeece9;">
+    <p style="margin:0 0 4px;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">Mind Sovereignty</p>
+    <h1 style="margin:0;font-size:26px;font-weight:900;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;line-height:1.15;">Your Sovereignty Assessment &amp; 4-Week Roadmap</h1>
+    <p style="margin:6px 0 0;font-size:13px;color:#5c8260;font-family:Inter,sans-serif;font-weight:500;">${archetypeName}</p>
+  </td></tr>
 
-        <!-- Brief Summary -->
-        <tr>
-          <td style="padding:32px 48px;border-bottom:1px solid #eeece9;">
-            <p style="margin:0 0 16px;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">
-              Your Snapshot
-            </p>
-            <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">
-              ${hoursLine} ${severityLine} ${interestsLine}
-              Here is your personalised roadmap to take back control.
-            </p>
-          </td>
-        </tr>
+  <!-- Summary -->
+  <tr><td style="padding:32px 48px;border-bottom:1px solid #eeece9;">
+    <p style="margin:0 0 12px;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">Your Snapshot</p>
+    <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">
+      ${hoursLine}${severityLine}${interestsLine}Your personalised roadmap and full written assessment are attached as a PDF.
+    </p>
+  </td></tr>
 
-        <!-- Cognitive Leakage Scores -->
-        <tr>
-          <td style="padding:32px 48px;border-bottom:1px solid #eeece9;">
-            <p style="margin:0 0 16px;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">
-              Cognitive Leakage
-            </p>
-            <table cellpadding="0" cellspacing="0">
-              ${leakageBars(scores)}
-            </table>
-            <p style="margin:14px 0 0;font-size:11px;color:#bbb;font-family:Inter,sans-serif;">
-              Where your mental energy is being spent. Each score is out of 100.
-            </p>
-          </td>
-        </tr>
+  <!-- Cognitive Leakage -->
+  <tr><td style="padding:32px 48px;border-bottom:1px solid #eeece9;">
+    <p style="margin:0 0 16px;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">Cognitive Leakage</p>
+    <table cellpadding="0" cellspacing="0">${leakageBars(scores)}</table>
+    <p style="margin:14px 0 0;font-size:11px;color:#bbb;font-family:Inter,sans-serif;">Where your mental energy is being spent. Each score is out of 100.</p>
+  </td></tr>
 
-        <!-- Pre-Plan Prep -->
-        <tr>
-          <td style="padding:32px 48px 0;">
-            <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">
-              Before You Begin
-            </p>
-            <h2 style="margin:0 0 10px;font-size:18px;font-weight:800;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;">
-              Pre-Plan Preparation
-            </h2>
-            <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">
-              Gather your necessary tools and read through the solutions ahead. Silence your notifications,
-              and define a dedicated "home" for your phone — a specific spot in your living space where it
-              stays when not in active use. This single environmental change is one of the highest-leverage
-              moves you can make before the plan begins.
-            </p>
-          </td>
-        </tr>
+  <!-- Pre-plan prep -->
+  <tr><td style="padding:32px 48px 0;">
+    <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">Before You Begin</p>
+    <h2 style="margin:0 0 10px;font-size:18px;font-weight:800;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;">Pre-Plan Preparation</h2>
+    <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">Gather your necessary tools and read through the solutions in your attached PDF. Silence your notifications, and define a dedicated "home" for your phone — a specific spot where it stays when not in active use.</p>
+  </td></tr>
+  <tr><td style="padding:20px 48px;"><hr style="border:none;border-top:1px solid #eeece9;"/></td></tr>
 
-        <tr><td style="padding:20px 48px;"><hr style="border:none;border-top:1px solid #eeece9;" /></td></tr>
+  <!-- Week 1 -->
+  <tr><td style="padding:0 48px;">
+    <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">Week 01</p>
+    <h2 style="margin:0 0 10px;font-size:18px;font-weight:800;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;">Phase 1: The Reset</h2>
+    <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">Start your chosen hobby or interest. Inform friends and family of the challenge — social accountability dramatically improves follow-through. Write down your intentions. Brace for the biological pressure to revert to your phone. This is normal, and temporary.</p>
+  </td></tr>
+  <tr><td style="padding:20px 48px;"><hr style="border:none;border-top:1px solid #eeece9;"/></td></tr>
 
-        <!-- Week 1: Phase 1 The Reset -->
-        <tr>
-          <td style="padding:0 48px;">
-            <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">
-              Week 01
-            </p>
-            <h2 style="margin:0 0 10px;font-size:18px;font-weight:800;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;">
-              Phase 1: The Reset
-            </h2>
-            <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">
-              Start your chosen hobby or interest — even in a small way. Inform friends and family that
-              you are taking on this challenge; social accountability dramatically improves follow-through.
-              Write down your intentions and the specific outcome you want after 4 weeks.
-              Brace yourself: the biological pressure to revert to your phone will be strong in
-              the first few days. This is normal, and it is temporary.
-            </p>
-          </td>
-        </tr>
+  <!-- Week 2 -->
+  <tr><td style="padding:0 48px;">
+    <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">Week 02</p>
+    <h2 style="margin:0 0 10px;font-size:18px;font-weight:800;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;">Phase 2: The Itch</h2>
+    <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">Fully delete your highest-trigger apps. Not mute — delete. This is the most uncomfortable week. The discomfort you feel is your dopamine system recalibrating. Sit with the itch rather than scratching it. Each time you resist the urge, you are physically rewiring the habit loop.</p>
+  </td></tr>
+  <tr><td style="padding:20px 48px;"><hr style="border:none;border-top:1px solid #eeece9;"/></td></tr>
 
-        <tr><td style="padding:20px 48px;"><hr style="border:none;border-top:1px solid #eeece9;" /></td></tr>
+  <!-- Week 3 -->
+  <tr><td style="padding:0 48px;">
+    <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">Week 03</p>
+    <h2 style="margin:0 0 10px;font-size:18px;font-weight:800;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;">Phase 3: Rebuilding Focus</h2>
+    <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">Most people notice a shift here. Sleep becomes deeper, concentration returns, and activities that felt slow begin to feel engaging again. Concentrate heavily on your chosen hobby and let yourself become absorbed.</p>
+  </td></tr>
+  <tr><td style="padding:20px 48px;"><hr style="border:none;border-top:1px solid #eeece9;"/></td></tr>
 
-        <!-- Week 2: Phase 2 The Itch -->
-        <tr>
-          <td style="padding:0 48px;">
-            <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">
-              Week 02
-            </p>
-            <h2 style="margin:0 0 10px;font-size:18px;font-weight:800;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;">
-              Phase 2: The Itch
-            </h2>
-            <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">
-              Fully delete your highest-trigger apps. Not mute — delete. This is the most
-              uncomfortable week, often called "living with the gap." The discomfort you feel is
-              your dopamine system recalibrating. Sit with the itch rather than scratching it.
-              Each time you resist the urge, you are physically rewiring the habit loop.
-            </p>
-          </td>
-        </tr>
+  <!-- Week 4 -->
+  <tr><td style="padding:0 48px 32px;">
+    <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">Week 04</p>
+    <h2 style="margin:0 0 10px;font-size:18px;font-weight:800;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;">Phase 4: The New Normal</h2>
+    <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">Freedom from compulsive loops and dopamine irregularity. Your phone is a tool again rather than a pull. The goal now is to make this your permanent baseline — designing your environment so that presence, not scrolling, is the path of least resistance.</p>
+  </td></tr>
 
-        <tr><td style="padding:20px 48px;"><hr style="border:none;border-top:1px solid #eeece9;" /></td></tr>
+  <!-- CTA -->
+  <tr><td style="padding:24px 48px 40px;background:#2c2c2c;">
+    <p style="margin:0 0 6px;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:rgba(255,255,255,0.35);font-family:Inter,sans-serif;">Your next step</p>
+    <p style="margin:0 0 20px;font-size:15px;color:rgba(255,255,255,0.75);font-family:Inter,sans-serif;line-height:1.6;">Your full written assessment is attached. Use it alongside our tools to build the structure you need to make this permanent.</p>
+    <a href="https://mindsovereignty.com/#tools" style="display:inline-block;background:#5c8260;color:#fff;font-family:Outfit,Inter,sans-serif;font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;padding:14px 28px;">Ready to Start? Take me to my recovery dashboard.</a>
+  </td></tr>
 
-        <!-- Week 3: Phase 3 Rebuilding Focus -->
-        <tr>
-          <td style="padding:0 48px;">
-            <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">
-              Week 03
-            </p>
-            <h2 style="margin:0 0 10px;font-size:18px;font-weight:800;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;">
-              Phase 3: Rebuilding Focus
-            </h2>
-            <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">
-              Most people notice a shift here. Sleep becomes deeper, concentration returns, and
-              activities that previously felt boring or slow begin to feel engaging again.
-              Concentrate heavily on your chosen hobby and let yourself become absorbed. This is
-              your dopamine baseline recalibrating to the real world.
-            </p>
-          </td>
-        </tr>
+  <!-- Footer -->
+  <tr><td style="padding:20px 48px;border-top:1px solid #eeece9;">
+    <p style="margin:0;font-size:11px;color:#bbb;font-family:Inter,sans-serif;">&copy; ${year} Mind Sovereignty &middot; You received this because you completed our Digital Health Assessment.<br/>No spam, ever.</p>
+  </td></tr>
 
-        <tr><td style="padding:20px 48px;"><hr style="border:none;border-top:1px solid #eeece9;" /></td></tr>
-
-        <!-- Week 4: Phase 4 The New Normal -->
-        <tr>
-          <td style="padding:0 48px 32px;">
-            <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">
-              Week 04
-            </p>
-            <h2 style="margin:0 0 10px;font-size:18px;font-weight:800;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;">
-              Phase 4: The New Normal
-            </h2>
-            <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">
-              Freedom from compulsive loops and dopamine irregularity. At this stage, your phone
-              is a tool again rather than a pull. You are using it with intention. The goal now
-              is to make this your permanent baseline — redesigning your environment so that
-              presence, not scrolling, becomes the path of least resistance.
-            </p>
-          </td>
-        </tr>
-
-        <!-- CTA -->
-        <tr>
-          <td style="padding:24px 48px 40px;background:#2c2c2c;">
-            <p style="margin:0 0 6px;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;
-                      color:rgba(255,255,255,0.35);font-family:Inter,sans-serif;">
-              Your next step
-            </p>
-            <p style="margin:0 0 20px;font-size:15px;color:rgba(255,255,255,0.75);
-                      font-family:Inter,sans-serif;line-height:1.6;">
-              Your roadmap is ready. Use it alongside our tools to build the friction and
-              structure you need to make this permanent.
-            </p>
-            <a href="https://mindsovereignty.com/#tools"
-               style="display:inline-block;background:#5c8260;color:#fff;
-                      font-family:Outfit,Inter,sans-serif;font-size:12px;font-weight:700;
-                      letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;
-                      padding:14px 28px;">
-              Ready to Start? Take me to my recovery dashboard.
-            </a>
-          </td>
-        </tr>
-
-        <!-- Footer -->
-        <tr>
-          <td style="padding:20px 48px;border-top:1px solid #eeece9;">
-            <p style="margin:0;font-size:11px;color:#bbb;font-family:Inter,sans-serif;">
-              &copy; ${year} Mind Sovereignty &middot; You received this because you completed
-              our Digital Health Assessment.<br />No spam, ever.
-            </p>
-          </td>
-        </tr>
-
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>`
+</table>
+</td></tr></table>
+</body></html>`
 }
 
-/* ── Handler ───────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════
+   HANDLER
+═══════════════════════════════════════════════════════════════════════════ */
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: CORS })
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
   try {
     let body: Record<string, unknown>
     try {
       body = await req.json()
-    } catch (parseErr) {
-      console.error('Catch Error — failed to parse request body:', parseErr)
+    } catch (e) {
       return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
-        status: 400,
-        headers: { ...CORS, 'Content-Type': 'application/json' },
+        status: 400, headers: { ...CORS, 'Content-Type': 'application/json' },
       })
     }
 
     const { record } = body as { record?: Record<string, unknown> }
-    console.log('Received record:', JSON.stringify(record ?? null))
-
     if (!record) {
-      console.error('Catch Error — no record in payload. Body keys:', Object.keys(body))
       return new Response(JSON.stringify({ error: 'No record in payload' }), {
-        status: 400,
-        headers: { ...CORS, 'Content-Type': 'application/json' },
+        status: 400, headers: { ...CORS, 'Content-Type': 'application/json' },
       })
     }
 
@@ -322,14 +549,12 @@ serve(async (req) => {
     const rawAudit    = record.audit_data
 
     if (!email) {
-      console.error('Catch Error — record.email is missing or empty.')
-      return new Response(JSON.stringify({ error: 'Missing email in record' }), {
-        status: 400,
-        headers: { ...CORS, 'Content-Type': 'application/json' },
+      return new Response(JSON.stringify({ error: 'Missing email' }), {
+        status: 400, headers: { ...CORS, 'Content-Type': 'application/json' },
       })
     }
 
-    // Parse leakage scores
+    // Parse scores
     let scores: Record<string, number> = {}
     if (rawScores && typeof rawScores === 'object' && !Array.isArray(rawScores)) {
       scores = rawScores as Record<string, number>
@@ -337,7 +562,7 @@ serve(async (req) => {
       try { scores = JSON.parse(rawScores) } catch { /* ignore */ }
     }
 
-    // Parse audit data (interests, severity, usageHours, etc.)
+    // Parse audit data
     let auditData: Record<string, string> = {}
     if (rawAudit && typeof rawAudit === 'object' && !Array.isArray(rawAudit)) {
       auditData = rawAudit as Record<string, string>
@@ -347,51 +572,59 @@ serve(async (req) => {
 
     const resendKey = Deno.env.get('RESEND_API_KEY')
     if (!resendKey) {
-      console.error('Catch Error — RESEND_API_KEY secret is not set')
       return new Response(JSON.stringify({ error: 'RESEND_API_KEY not configured' }), {
-        status: 500,
-        headers: { ...CORS, 'Content-Type': 'application/json' },
+        status: 500, headers: { ...CORS, 'Content-Type': 'application/json' },
       })
     }
 
-    console.log('Attempting Resend with email:', email)
+    // Generate HTML email
+    const html = buildEmail(email, profileType, scores, auditData)
 
-    const html    = buildEmail(email, profileType, scores, auditData)
+    // Generate PDF — gracefully degrade if it fails
+    let attachments: unknown[] = []
+    try {
+      const pdfBytes  = await buildPDF(profileType, scores, auditData)
+      const pdfBase64 = btoa(pdfBytes.reduce((s, b) => s + String.fromCharCode(b), ''))
+      attachments = [{
+        filename: 'mind-sovereignty-assessment.pdf',
+        content:  pdfBase64,
+      }]
+      console.log('PDF generated successfully, size:', pdfBytes.length)
+    } catch (pdfErr) {
+      console.error('PDF generation failed (email will still send):', pdfErr)
+    }
+
+    console.log('Sending email to:', email)
+
     const resResp = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${resendKey}`,
-        'Content-Type':  'application/json',
-      },
+      method:  'POST',
+      headers: { 'Authorization': `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from:    'Mind Sovereignty <onboarding@resend.dev>',
-        to:      [email],
-        subject: 'Your Sovereignty Assessment & 4-Week Roadmap',
+        from:        'Mind Sovereignty <onboarding@resend.dev>',
+        to:          [email],
+        subject:     'Your Sovereignty Assessment & 4-Week Roadmap',
         html,
+        attachments,
       }),
     })
 
     const resBody = await resResp.json()
-
     if (!resResp.ok) {
-      console.error('Catch Error — Resend API rejected the request:', JSON.stringify(resBody))
+      console.error('Resend error:', JSON.stringify(resBody))
       return new Response(JSON.stringify({ error: 'Resend API error', detail: resBody }), {
-        status: 502,
-        headers: { ...CORS, 'Content-Type': 'application/json' },
+        status: 502, headers: { ...CORS, 'Content-Type': 'application/json' },
       })
     }
 
-    console.log('Resend success. Email ID:', resBody.id)
+    console.log('Email sent successfully. ID:', resBody.id)
     return new Response(JSON.stringify({ success: true, id: resBody.id }), {
-      status: 200,
-      headers: { ...CORS, 'Content-Type': 'application/json' },
+      status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
     })
 
   } catch (err) {
-    console.error('Catch Error — unhandled exception:', err)
+    console.error('Unhandled exception:', err)
     return new Response(JSON.stringify({ error: String(err) }), {
-      status: 500,
-      headers: { ...CORS, 'Content-Type': 'application/json' },
+      status: 500, headers: { ...CORS, 'Content-Type': 'application/json' },
     })
   }
 })
