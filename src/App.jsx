@@ -36,41 +36,32 @@ export default function App() {
                   <div className="md:col-span-3 space-y-6">
                     <p className="text-base text-neutral-800 font-light leading-relaxed">
                       The modern smartphone is the most successful attention-capture device ever
-                      built. Behind every infinite scroll is a multi-billion dollar architecture
-                      engineered to keep you there longer than you intended. When you spend too
-                      much time on your phone, you aren't failing; the system is working exactly
-                      as designed.
+                      built, backed by an architecture engineered to keep you hooked. If you find
+                      yourself endlessly scrolling, it isn't a personal failure or a lack of
+                      discipline — it's the logical outcome of an unfair fight. Our brains simply
+                      weren't made for this level of over-saturation. The constant flood of cheap
+                      dopamine throws our emotions out of balance, leading to unpredictable mood
+                      swings, fractured focus, eroded sleep, and a loss of time for the things
+                      that truly fulfil us.
                     </p>
                     <p className="text-base text-neutral-800 font-light leading-relaxed">
-                      High daily screen time is not a lack of discipline — it is the logical
-                      outcome of an uneven fight. Our brains weren't made for such
-                      over-saturation and the consequences are real: fractured focus, eroded
-                      sleep, and a lack of time to pursue the things that really fulfill us in
-                      life.
+                      You likely already feel these consequences, but how do you fight back
+                      against a system designed to keep you addicted? It starts with our short
+                      quiz, which gives you personalised, targeted advice based on your specific
+                      habits. From there, we guide you through a step-by-step recovery plan,
+                      equipping you with practical tools designed to help you along the way. We
+                      focus on building the right friction to dismantle your digital loops —
+                      relying on proven strategy, not exhausting willpower.
                     </p>
                     <p className="text-base text-neutral-800 font-light leading-relaxed">
-                      We suspect you already know most of this, and that you have real-life
-                      experience of those consequences. So when the richest companies in the
-                      world have the greatest minds working to keep you addicted to your phone,
-                      realistically, what can you actually do about it?
-                    </p>
-                    <p className="text-base text-neutral-800 font-light leading-relaxed">
-                      That's where Mind Sovereignty comes in. We help you keep your phone in
-                      check. We don't just care about your screen time; we care about the impact
-                      of that time and how we can help you build a healthier relationship with
-                      your phone. We provide the science-backed protocols and personalized
-                      diagnostics needed to dismantle these digital loops and return your focus
-                      to where it belongs. Through our roadmap, we help you understand your
-                      unique digital triggers and systematically build the friction needed to
-                      break free.{' '}
+                      Rewiring your habits won't happen overnight, but we have one massive
+                      advantage over the tech companies.{' '}
                       <strong className="font-extrabold text-neutral-900">
-                        Not through willpower. Through strategy.
+                        Real life — for all its messy, unpredictable flaws — is simply better
+                        than the scroll.
                       </strong>
-                    </p>
-                    <p className="text-base text-neutral-800 font-light leading-relaxed">
-                      We won't pretend it'll be easy, but there is one big advantage we have
-                      against these tech forces: real life—for all its flaws and hiccups—is
-                      simply better than the scroll.
+                      {' '}It's time to keep your phone in check, reclaim your attention, and
+                      get back to living.
                     </p>
                   </div>
 
