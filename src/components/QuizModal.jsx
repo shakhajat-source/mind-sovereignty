@@ -1,183 +1,269 @@
 import { useState, useEffect } from 'react'
-import { BarChart, Bar, XAxis, YAxis, Cell, ResponsiveContainer } from 'recharts'
+import { AnimatePresence, motion } from 'framer-motion'
+import {
+  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
+} from 'recharts'
 import { supabase } from '../lib/supabase'
-import { computeArchetype, computeCognitiveLeakage, ARCHETYPES } from '../lib/archetypes'
 
 /* ─────────────────────────────────────────────────────────────────────────────
    STEP MAP
    0  → Intro
-   1  → Section 1: Usage (6 questions on one screen)
-   2  → Section 2a: App Categories (ranked)
-   3  → Section 2b: Sub-categories (conditional — skipped for utility/not_sure)
-   4  → Section 3: Patterns (When, Where, Shadow)
-   5  → Section 4: Motives (ranked, 11 options)
-   6  → Section 5: Severity & Impact (Q4 + Q5 on one screen)
-   7  → Section 6: Attention Span (single multiple-choice)
-   8  → Section 7: Interests (open text)
-   9  → Section 8: Social Connection (multiple-choice)
-   10 → Results (Archetype + Cognitive Leakage chart)
+   1  → Usage       (Hours · Zombie% · Pickups)      [USAGE axis]
+   2  → Content     (Donut + 4 linked sliders)        [CONTENT axis]
+   3  → Situation   (Checkboxes: 4 options)           [SITUATION axis]
+   4  → Impact      (Checkboxes: 5 options)           [IMPACT axis]
+   5  → Attention   (Radio: 4 options)                [ATTENTION axis]
+   6  → Interests   (Open text — Rat Park Strategy)
+   7  → Results     (Radar Chart + Dynamic Report + CTA)
 ───────────────────────────────────────────────────────────────────────────── */
 
-const MAX_STEPS = 9
+const MAX_STEPS = 6 // displayed steps 1–6
 
-/* ── Section 1: Usage ────────────────────────────────────────────────────── */
-const USAGE_HOURS_OPTIONS = [
-  { key: '0to2',  label: '0 – 2 hours'  },
-  { key: '2to4',  label: '2 – 4 hours'  },
-  { key: '4to6',  label: '4 – 6 hours'  },
-  { key: '6to8',  label: '6 – 8 hours'  },
-  { key: '8to10', label: '8 – 10 hours' },
-  { key: 'gt10',  label: '10+ hours'    },
+/* ── Step 1: Usage ───────────────────────────────────────────────────────── */
+const HOURS_OPTIONS = [
+  { key: '0to2',   label: '0–2 h',   score: 10  },
+  { key: '2to4',   label: '2–4 h',   score: 30  },
+  { key: '4to6',   label: '4–6 h',   score: 50  },
+  { key: '6to8',   label: '6–8 h',   score: 70  },
+  { key: '8to10',  label: '8–10 h',  score: 90  },
+  { key: 'gt10',   label: '10+ h',   score: 100 },
 ]
-const UNNECESSARY_PCT_OPTIONS = [
-  { key: '10to20', label: '10–20%'   },
-  { key: '20to30', label: '20–30%'   },
-  { key: '30to40', label: '30–40%'   },
-  { key: 'gt40',   label: '40%+'     },
-  { key: 'not_sure', label: 'Not Sure' },
+const ZOMBIE_OPTIONS = [
+  { key: '0to20',  label: '0–20%',  score: 10  },
+  { key: '20to40', label: '20–40%', score: 30  },
+  { key: '40to60', label: '40–60%', score: 60  },
+  { key: '60to80', label: '60–80%', score: 80  },
+  { key: 'gt80',   label: '80%+',   score: 100 },
 ]
-const MORNING_OPTIONS      = [{ key: 'agree', label: 'Agree' }, { key: 'disagree', label: 'Disagree' }, { key: 'trying', label: 'Trying not to' }]
-const WORK_PROC_OPTIONS    = [{ key: 'agree', label: 'Agree' }, { key: 'disagree', label: 'Disagree' }, { key: 'not_sure', label: 'Not Sure' }]
-const MOVIE_FOCUS_OPTIONS  = [{ key: 'agree', label: 'Agree' }, { key: 'disagree', label: 'Disagree' }]
-const SOCIAL_FB_OPTIONS    = [{ key: 'agree', label: 'Agree' }, { key: 'disagree', label: 'Disagree' }]
-
-/* ── Section 2a: App Categories ──────────────────────────────────────────── */
-const Q2_OPTIONS = [
-  { key: 'work_admin',   label: 'Work / Life Admin',       desc: 'Emails, sorting finances, life logistics, staying on top of tasks' },
-  { key: 'social_doom',  label: 'Social Doomscrolling',    desc: 'Passively flicking through X, TikTok, Instagram, Facebook, YouTube Reels' },
-  { key: 'own_social',   label: 'Your Own Social Network', desc: 'Seeing what friends are up to, messaging, posting your own content' },
-  { key: 'games_videos', label: 'Games & Videos',          desc: 'YouTube deep-dives, gaming, streaming, content rabbit holes' },
-  { key: 'utility',      label: 'Utility',                 desc: 'Maps, banking, calendar, travel — functional use with little excess' },
-  { key: 'not_sure',     label: 'Not sure',                desc: 'I genuinely cannot identify a clear pattern' },
+const PICKUP_OPTIONS = [
+  { key: '0to50',   label: '0–50',   score: 20  },
+  { key: '51to100', label: '51–100', score: 60  },
+  { key: 'gt100',   label: '101+',   score: 100 },
 ]
 
-/* ── Section 2b: Sub-categories ──────────────────────────────────────────── */
-const SUBCATEGORIES = {
-  work_admin: {
-    question: 'Which type of work/admin use is pulling you in most?',
-    options: [
-      { key: 'email_slack', label: 'Email & Slack / messaging apps' },
-      { key: 'task_mgmt',   label: 'Task management & to-do lists' },
-      { key: 'finance',     label: 'Finance, banking & admin' },
-      { key: 'news_feeds',  label: 'News & professional feeds (LinkedIn, etc.)' },
-    ],
-  },
-  social_doom: {
-    question: 'Where does the doomscrolling happen most?',
-    options: [
-      { key: 'tiktok',    label: 'TikTok / Instagram Reels / YouTube Shorts' },
-      { key: 'twitter_x', label: 'X / Twitter' },
-      { key: 'instagram', label: 'Instagram feed & stories' },
-      { key: 'facebook',  label: 'Facebook / Reddit' },
-    ],
-  },
-  own_social: {
-    question: 'What drives your own social network use?',
-    options: [
-      { key: 'fomo',      label: 'Fear of missing out — checking what others are doing' },
-      { key: 'posting',   label: 'Creating & posting my own content' },
-      { key: 'messaging', label: 'Direct messaging & group chats' },
-      { key: 'approval',  label: 'Checking likes, comments & reactions' },
-    ],
-  },
-  games_videos: {
-    question: 'What type of content or gaming pulls you in?',
-    options: [
-      { key: 'youtube',      label: 'YouTube long-form videos' },
-      { key: 'streaming',    label: 'Netflix / streaming on phone' },
-      { key: 'mobile_games', label: 'Mobile games' },
-      { key: 'podcasts',     label: 'Podcasts / audio content' },
-    ],
-  },
+/* ── Step 2: Content ─────────────────────────────────────────────────────── */
+const CONTENT_KEYS = ['social', 'notSure', 'comm', 'utility']
+const CONTENT_META = {
+  social:  { label: 'Social',   chartColor: '#C0392B', textColor: '#C0392B' },
+  notSure: { label: 'Not Sure', chartColor: '#7F8C8D', textColor: '#5a6060' },
+  comm:    { label: 'Comm',     chartColor: '#2980B9', textColor: '#2980B9' },
+  utility: { label: 'Utility',  chartColor: '#F39C12', textColor: '#b87800' },
 }
 
-/* ── Section 3: Patterns ─────────────────────────────────────────────────── */
-const WHEN_OPTIONS = [
-  { key: 'morning',    label: 'Morning'      },
-  { key: 'work',       label: 'During Work'  },
-  { key: 'evening',    label: 'Evening'      },
-  { key: 'late_night', label: 'Late Night'   },
-]
-const WHERE_OPTIONS = [
-  { key: 'in_bed',    label: 'In bed'        },
-  { key: 'sofa',      label: 'On the sofa'   },
-  { key: 'desk',      label: 'At my desk'    },
-  { key: 'kitchen',   label: 'In the kitchen'},
-  { key: 'commuting', label: 'Commuting'     },
-]
-const SHADOW_OPTIONS = [
-  { key: 'follows',  label: 'It follows me'  },
-  { key: 'has_home', label: 'It has a home'  },
+/* ── Step 3: Situation ───────────────────────────────────────────────────── */
+const SITUATION_OPTIONS = [
+  { key: 'morning', label: 'Morning'      },
+  { key: 'work',    label: 'Work / Study' },
+  { key: 'evening', label: 'Evening'      },
+  { key: 'bed',     label: 'Before Bed'   },
 ]
 
-/* ── Section 4: Motives ──────────────────────────────────────────────────── */
-const MOTIVE_OPTIONS = [
-  { key: 'connection',      label: 'Connection',              desc: 'Staying close to friends/family' },
-  { key: 'information',     label: 'Information',             desc: 'News, politics, world events' },
-  { key: 'emotional_buffer',label: 'Emotional Buffer',        desc: 'Soothing stress, anxiety, loneliness' },
-  { key: 'avoidance',       label: 'Avoidance',               desc: 'Procrastinating on a task' },
-  { key: 'gap_filler',      label: 'The Gap Filler',          desc: 'Hating boredom, waiting in lines' },
-  { key: 'secondary_screen',label: 'Secondary Screen',        desc: 'Background noise' },
-  { key: 'high_stimulation',label: 'High-Stimulation',        desc: 'Slow activities feel boring' },
-  { key: 'tactile',         label: 'Tactile / Fidgeting',     desc: 'Hands need something to do' },
-  { key: 'rabbit_hole',     label: 'The Rabbit Hole',         desc: "Loop of seeking 'one more' answer" },
-  { key: 'validation',      label: 'Validation',              desc: 'Checking likes, comments, engagement' },
-  { key: 'professional',    label: 'Professional Obligation', desc: "Pressure to be always 'on'" },
+/* ── Step 4: Impact ──────────────────────────────────────────────────────── */
+const IMPACT_OPTIONS = [
+  { key: 'focus',         label: 'Eroded Focus'        },
+  { key: 'time',          label: 'Time Frustration'    },
+  { key: 'numbing',       label: 'Emotional Numbing'   },
+  { key: 'relationships', label: 'Relationship Strain' },
+  { key: 'fatigue',       label: 'Post-Scroll Fatigue' },
 ]
 
-/* ── Section 5: Severity & Impact ────────────────────────────────────────── */
-const Q4_OPTIONS = [
-  { key: 'sleep',     label: 'Sleep quality' },
-  { key: 'focus',     label: 'Ability to focus on deep work' },
-  { key: 'attention', label: 'Attention span & reading ability' },
-  { key: 'relations', label: 'Relationships & in-person connections' },
-  { key: 'fitness',   label: 'Physical fitness & health habits' },
-  { key: 'not_sure',  label: 'Not sure / all of the above' },
-]
-const Q5_OPTIONS = [
-  { key: 'mild',     label: "Mild — I notice it but it doesn't really bother me" },
-  { key: 'moderate', label: "Moderate — it's affecting my daily life noticeably" },
-  { key: 'severe',   label: "Severe — it's a real problem I need to fix" },
-  { key: 'crisis',   label: "Crisis — it's significantly damaging my life" },
-]
-
-/* ── Section 6: Attention ────────────────────────────────────────────────── */
+/* ── Step 5: Attention ───────────────────────────────────────────────────── */
 const ATTENTION_OPTIONS = [
-  { key: 'flow_state',   label: "I get into a 'flow state' and rarely notice distractions." },
-  { key: 'check_once',   label: 'I might check my phone once or twice, but I get the job done.' },
-  { key: 'switch_tasks', label: 'I frequently switch between tabs or tasks before finishing the first one.' },
-  { key: 'pulled_away',  label: "Every notification or noise completely pulls me away from what I'm doing." },
-  { key: 'cant_refocus', label: 'I spend more time trying to get back into the zone than actually working.' },
+  {
+    key: 'flow', label: 'Flow State', score: 0,
+    desc: "I enter a deep focus and work through the hour without noticing distractions. My phone stays untouched and I finish what I started.",
+  },
+  {
+    key: 'itch', label: 'The Itch', score: 33,
+    desc: "I feel a pull to check my phone every 10–15 minutes but can resist it. The urge is there — I'm aware of it — but I stay on task most of the time.",
+  },
+  {
+    key: 'fragmentation', label: 'The Fragmentation', score: 66,
+    desc: "I regularly switch between the task and my phone or other tabs. I never fully disconnect. By the end of the hour I've done some work but lost significant time to drift.",
+  },
+  {
+    key: 'reset', label: 'The Reset', score: 100,
+    desc: "I can't sustain focus for more than a few minutes. Each time I try to re-engage I get pulled away again. The hour ends with little meaningful progress.",
+  },
 ]
 
-/* ── Section 8: Social Connection ───────────────────────────────────────── */
-const SOCIAL_OPTIONS = [
-  { key: 'rarely',     label: "Rarely — I'm too busy/tired" },
-  { key: 'once_week',  label: 'Once a week' },
-  { key: '2to3_week',  label: '2–3 times a week' },
-  { key: 'too_busy',   label: "My life is too busy to socialise" },
-  { key: 'online_only',label: "I don't meet people in person — my social life is online" },
-]
+/* ─────────────────────────────────────────────────────────────────────────────
+   SCORING
+───────────────────────────────────────────────────────────────────────────── */
+function computeScores(answers) {
+  // USAGE: MAX(hours, zombie, pickups)
+  const hScore = HOURS_OPTIONS.find(o => o.key === answers.hours)?.score ?? 0
+  const zScore = ZOMBIE_OPTIONS.find(o => o.key === answers.zombie)?.score ?? 0
+  const pScore = PICKUP_OPTIONS.find(o => o.key === answers.pickups)?.score ?? 0
+  const usage  = Math.max(hScore, zScore, pScore)
 
-/* ── Misc ─────────────────────────────────────────────────────────────────── */
-const Q5_LABEL = { mild: 'Mild', moderate: 'Moderate', severe: 'Severe', crisis: 'Crisis' }
+  // CONTENT: social% + notSure% (cap 100)
+  const content = Math.min(100, (answers.content.social ?? 0) + (answers.content.notSure ?? 0))
 
+  // SITUATION: checkedCount × 25
+  const situation = Math.min(100, answers.situation.length * 25)
+
+  // IMPACT: checkedCount × 20
+  const impact = Math.min(100, answers.impact.length * 20)
+
+  // ATTENTION: from radio selection
+  const attention = ATTENTION_OPTIONS.find(o => o.key === answers.attention)?.score ?? 0
+
+  return { usage, content, situation, impact, attention }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   COACHING INSIGHT GENERATORS
+───────────────────────────────────────────────────────────────────────────── */
+function getUsageInsight(answers) {
+  const hScore = HOURS_OPTIONS.find(o => o.key === answers.hours)?.score ?? 0
+  const zScore = ZOMBIE_OPTIONS.find(o => o.key === answers.zombie)?.score ?? 0
+  const pScore = PICKUP_OPTIONS.find(o => o.key === answers.pickups)?.score ?? 0
+  const max = Math.max(hScore, zScore, pScore)
+  // Priority: hours → zombie → pickups
+  if (max === hScore) {
+    return "Your raw exposure duration is the primary load on your attention architecture. At this volume, device use is not supplementing your life — it has become the primary activity structuring your waking hours."
+  }
+  if (max === zScore) {
+    return "The majority of your screen time is classified as unintentional. You are not directing your device — the device is summoning you. This is the structural definition of a conditioned behavior loop, not a choice."
+  }
+  return "Your pickup frequency is the dominant risk signal. Each unlock event disrupts your cognitive state and initiates a full attention reset — a cost that compounds across hundreds of daily interruptions."
+}
+
+function getContentInsight(content) {
+  if (content.social > 50) {
+    return "Social content constitutes the majority of your consumption profile. Algorithmic feeds operate on variable-ratio reinforcement — the most powerful conditioning schedule in behavioral psychology. Your dopamine baseline has been recalibrated to engineered novelty."
+  }
+  if (content.notSure > 25) {
+    return "A significant portion of your usage cannot be categorized. Unconscious consumption is operationally more dangerous than deliberate use — you cannot interrupt a pattern you have not yet identified. Awareness is the first required intervention."
+  }
+  if (content.comm > 40) {
+    return "Communication apps are your primary content vector. The social contract of instant availability creates a state of chronic low-grade vigilance that is neurologically equivalent to a sustained, low-intensity threat response."
+  }
+  if (content.utility > 50) {
+    return "High utility usage often masks compulsive checking behavior. Legitimate functional needs rarely require this volume of device interaction. The device has likely colonized the utility frame to justify non-functional use."
+  }
+  return "Your content profile is distributed across multiple categories with no single dominant vector. Your risk is driven by aggregate volume rather than a specific content dependency — a pattern that requires scheduling intervention rather than app removal."
+}
+
+function getSituationInsight(situation) {
+  const score = situation.length * 25
+  if (score >= 75) {
+    return "Your device has colonized nearly every temporal context of your day. There are no protected cognitive windows remaining. Recovery requires deliberate architectural changes to your daily schedule before any behavioral intervention can hold."
+  }
+  if (situation.includes('morning')) {
+    return "Morning phone use is the highest-leverage intervention point on this profile. The first cortisol wave of the day sets your neurological operating state. Initiating with a stimulus-rich screen establishes fragmentation as your cognitive baseline before the day has begun."
+  }
+  if (situation.includes('bed')) {
+    return "Pre-sleep device use is measurably degrading your sleep architecture. Blue light suppresses melatonin synthesis, and social stimulation activates the default mode network precisely when it needs to be deactivating. This compounds every other cognitive deficit on this report."
+  }
+  if (situation.includes('work')) {
+    return "Device interruptions during productive hours produce an average 23-minute recovery cost per episode. At your reported frequency, this is not distraction — it is the structural elimination of deep work capacity."
+  }
+  return "Evening usage is the most common entry point for compulsive loops. Reduced cognitive control in the evening hours combined with lower-stakes time perception creates optimal conditions for extended unintentional sessions."
+}
+
+function getImpactInsight(impact) {
+  const score = impact.length * 20
+  if (score >= 80) {
+    return "Device use is producing cascading damage across multiple life domains simultaneously. When the impact profile extends this broadly, the device is no longer a tool being misused — it has become the organizing principle of dysfunction."
+  }
+  if (impact.includes('numbing')) {
+    return "Emotional numbing is the most diagnostically significant item on this profile. Using the device as an affect-regulation mechanism prevents natural emotional processing and creates a feedback loop where authentic experience becomes intolerable by comparison."
+  }
+  if (impact.includes('fatigue')) {
+    return "Post-scroll fatigue indicates your reward circuitry is running at a deficit. You are completing consumption sessions more depleted than when you began — a reliable marker of dopaminergic depletion, not fulfillment."
+  }
+  if (impact.includes('relationships')) {
+    return "Reported relationship strain is the leading behavioral indicator that usage has crossed into measurable life damage. Social bonds require presence; consistent device use signals to the people around you — and to your own nervous system — that the device is the priority relationship."
+  }
+  return "The impacts you have identified represent direct cognitive and behavioral costs of your current usage pattern. Each area flagged is a concrete levy on your time and attentional capacity."
+}
+
+function getAttentionInsight(attention) {
+  if (attention === 'reset') {
+    return "Critically fragmented. Your attention architecture has adapted to constant interruption as its baseline state. Sustained focus now produces discomfort — a neurological withdrawal response. Restoration requires deliberate, progressive re-exposure to uninterrupted cognitive work."
+  }
+  if (attention === 'fragmentation') {
+    return "Continuous partial attention. You are operating in a state of permanent semi-engagement — simultaneously present everywhere and nowhere. This is neurologically more costly than full focus or full rest, and is the chronic operating mode of cognitive depletion."
+  }
+  if (attention === 'itch') {
+    return "The Itch phase. You retain structural capacity for focus but experience compulsive pull-away urges. The attentional architecture is intact; the conditioning is not. This is the most recoverable position on the attention spectrum — the intervention window is open."
+  }
+  if (attention === 'flow') {
+    return "Resilient focus. Your attentional capacity is largely preserved. Your risk profile is concentrated in other domains on this assessment. Protecting this capacity should be treated as a priority asset — it is the first thing lost and the last thing recovered."
+  }
+  return "Attention state unrecorded."
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   CONTENT SLIDER ADJUSTMENT (always sums to 100)
+───────────────────────────────────────────────────────────────────────────── */
+function adjustContentSliders(prev, key, rawVal) {
+  const clamped = Math.max(0, Math.min(100, Math.round(rawVal)))
+  const others  = CONTENT_KEYS.filter(k => k !== key)
+  const remaining = 100 - clamped
+
+  if (remaining <= 0) {
+    const result = { social: 0, notSure: 0, comm: 0, utility: 0 }
+    result[key] = 100
+    return result
+  }
+
+  const nonZero    = others.filter(k => prev[k] > 0)
+  const result     = { ...prev, [key]: clamped }
+
+  if (nonZero.length === 0) {
+    const share = Math.floor(remaining / others.length)
+    others.forEach((k, i) => {
+      result[k] = i === others.length - 1
+        ? remaining - share * (others.length - 1)
+        : share
+    })
+    return result
+  }
+
+  const nonZeroSum = nonZero.reduce((s, k) => s + prev[k], 0)
+  let distributed  = 0
+  nonZero.forEach((k, i) => {
+    if (i < nonZero.length - 1) {
+      const share = Math.round((prev[k] / nonZeroSum) * remaining)
+      result[k]    = Math.max(0, share)
+      distributed += result[k]
+    } else {
+      result[k] = Math.max(0, remaining - distributed)
+    }
+  })
+  others.filter(k => prev[k] === 0).forEach(k => { result[k] = 0 })
+
+  return result
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   MISC HELPERS
+───────────────────────────────────────────────────────────────────────────── */
 function generateRef() {
   return `MSA-${new Date().getFullYear()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
 }
 
 function initAnswers() {
   return {
-    usageHours: null, unnecessaryPct: null, morningUsage: null,
-    workProcrastination: null, movieFocus: null, socialFeedback: null,
-    q2_ranked: [], q2b: [],
-    when: null, where: null, shadowStatus: null,
-    motives_ranked: [],
-    impactArea: null, severity: null,
-    attentionSpan: null,
+    hours:     null,
+    zombie:    null,
+    pickups:   null,
+    content:   { social: 25, notSure: 25, comm: 25, utility: 25 },
+    situation: [],
+    impact:    [],
+    attention: null,
     interests: '',
-    socialConnection: null,
   }
+}
+
+const STEP_VARIANTS = {
+  enter:  dir => ({ x: dir > 0 ? 30 : -30, opacity: 0 }),
+  center: { x: 0, opacity: 1, transition: { duration: 0.22, ease: 'easeOut' } },
+  exit:   dir => ({ x: dir > 0 ? -30 : 30, opacity: 0, transition: { duration: 0.14, ease: 'easeIn' } }),
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -185,6 +271,7 @@ function initAnswers() {
 ───────────────────────────────────────────────────────────────────────────── */
 export default function QuizModal({ isOpen, onClose }) {
   const [step,       setStep]       = useState(0)
+  const [dir,        setDir]        = useState(1)
   const [answers,    setAnswers]    = useState(initAnswers)
   const [email,      setEmail]      = useState('')
   const [newsletter, setNewsletter] = useState(false)
@@ -192,67 +279,52 @@ export default function QuizModal({ isOpen, onClose }) {
   const [saving,     setSaving]     = useState(false)
   const [refNum]                    = useState(generateRef)
 
-  /* ── Body scroll lock ──────────────────────────────────────────────────── */
+  /* body scroll lock */
   useEffect(() => {
     document.body.style.overflow = isOpen ? 'hidden' : ''
     return () => { document.body.style.overflow = '' }
   }, [isOpen])
 
-  /* ── Reset on close ────────────────────────────────────────────────────── */
+  /* reset on close */
   useEffect(() => {
     if (!isOpen) {
-      setStep(0); setAnswers(initAnswers())
+      setStep(0); setDir(1); setAnswers(initAnswers())
       setEmail(''); setNewsletter(false); setEmailSent(false); setSaving(false)
     }
   }, [isOpen])
 
   if (!isOpen) return null
 
-  /* ── Derived ───────────────────────────────────────────────────────────── */
   const isIntro   = step === 0
-  const isResults = step === 10
-  const progress  = isIntro ? 0 : isResults ? 100 : (step / 10) * 100
+  const isResults = step === 7
+  const progress  = isIntro ? 0 : isResults ? 100 : (step / MAX_STEPS) * 100
+  const scores    = computeScores(answers)
 
-  const topApp     = answers.q2_ranked?.[0] ?? null
-  const subCatData = topApp ? SUBCATEGORIES[topApp] : null
-  const skipQ2b    = !subCatData  // true for utility, not_sure, or unrecognised
-
-  // Results computation (safe to run on every render — cheap)
-  const archetypeKey = computeArchetype(topApp, answers.motives_ranked)
-  const archetype    = ARCHETYPES[archetypeKey]
-  const leakage      = computeCognitiveLeakage(topApp, answers.motives_ranked)
-
-  const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-
-  /* ── Helpers ───────────────────────────────────────────────────────────── */
+  /* ── State helpers ─────────────────────────────────────────────────────── */
   function set(key, val) {
     setAnswers(prev => ({ ...prev, [key]: val }))
   }
 
-  function toggleRank(arr, val) {
+  function toggleCheck(arr, val) {
     return arr.includes(val) ? arr.filter(k => k !== val) : [...arr, val]
   }
 
-  function toggleMultiMax2(arr, val) {
-    if (arr.includes(val)) return arr.filter(k => k !== val)
-    if (arr.length >= 2)   return arr
-    return [...arr, val]
+  function adjustContent(key, val) {
+    setAnswers(prev => ({
+      ...prev,
+      content: adjustContentSliders(prev.content, key, val),
+    }))
   }
 
   /* ── Validation ────────────────────────────────────────────────────────── */
   function canAdvance() {
     switch (step) {
-      case 1:
-        return !!(answers.usageHours && answers.unnecessaryPct && answers.morningUsage &&
-                  answers.workProcrastination && answers.movieFocus && answers.socialFeedback)
-      case 2: return answers.q2_ranked.length >= 1
-      case 3: return answers.q2b.length >= 1
-      case 4: return !!(answers.when && answers.where && answers.shadowStatus)
-      case 5: return answers.motives_ranked.length >= 1
-      case 6: return !!(answers.impactArea && answers.severity)
-      case 7: return !!answers.attentionSpan
-      case 8: return answers.interests.trim().length > 0
-      case 9: return !!answers.socialConnection
+      case 1: return !!(answers.hours && answers.zombie && answers.pickups)
+      case 2: return true // sliders always sum to 100
+      case 3: return answers.situation.length >= 1
+      case 4: return answers.impact.length >= 1
+      case 5: return !!answers.attention
+      case 6: return answers.interests.trim().length > 0
       default: return false
     }
   }
@@ -260,13 +332,13 @@ export default function QuizModal({ isOpen, onClose }) {
   /* ── Navigation ────────────────────────────────────────────────────────── */
   function advance() {
     if (!canAdvance()) return
-    if (step === 2 && skipQ2b) { setStep(4); return }
+    setDir(1)
     setStep(s => s + 1)
   }
 
   function retreat() {
-    if (step === 0) return
-    if (step === 4 && skipQ2b) { setStep(2); return }
+    if (step <= 0) return
+    setDir(-1)
     setStep(s => s - 1)
   }
 
@@ -276,25 +348,28 @@ export default function QuizModal({ isOpen, onClose }) {
     if (!email.trim() || saving) return
     setSaving(true)
 
+    const primaryContent = Object.entries(answers.content)
+      .sort((a, b) => b[1] - a[1])[0][0]
+
     const { error } = await supabase.from('quiz_submissions').insert({
-      email:                 email.trim().toLowerCase(),
-      primary_magnet:        topApp,
-      profile_type:          archetypeKey,
-      radar_scores:          leakage,
+      email:                email.trim().toLowerCase(),
+      primary_magnet:       primaryContent,
+      profile_type:         null,
+      radar_scores:         scores,
       audit_data: {
-        severity:            answers.severity,
-        interests:           answers.interests,
-        socialConnection:    answers.socialConnection,
-        usageHours:          answers.usageHours,
-        unnecessaryPct:      answers.unnecessaryPct,
-        impactArea:          answers.impactArea,
-        attentionSpan:       answers.attentionSpan,
-        morningUsage:        answers.morningUsage,
-        workProcrastination: answers.workProcrastination,
+        hours:     answers.hours,
+        zombie:    answers.zombie,
+        pickups:   answers.pickups,
+        content:   answers.content,
+        situation: answers.situation,
+        impact:    answers.impact,
+        attention: answers.attention,
+        interests: answers.interests,
+        refNum,
       },
       newsletter_subscribed: newsletter,
     })
-    if (error) console.error('quiz_submissions insert error:', error)
+    if (error) console.error('quiz_submissions error:', error)
 
     setSaving(false)
     setEmailSent(true)
@@ -320,30 +395,27 @@ export default function QuizModal({ isOpen, onClose }) {
     ].join(' ')
   }
 
-  /* ── Leakage chart data ─────────────────────────────────────────────────── */
-  const leakageData = [
-    { name: 'Stimulation Tax', value: leakage.stimulation, color: '#c17240' },
-    { name: 'Vigilance Tax',   value: leakage.vigilance,   color: '#5c7a8c' },
-    { name: 'Avoidance Tax',   value: leakage.avoidance,   color: '#8c6b5c' },
-  ]
-
   /* ── Render ────────────────────────────────────────────────────────────── */
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8"
          role="dialog" aria-modal="true" aria-label="Digital Health Assessment">
 
-      <div className="absolute inset-0 bg-[#1A1A1A]/75 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
+      <div className="absolute inset-0 bg-[#1A1A1A]/75 backdrop-blur-sm"
+           onClick={onClose} aria-hidden="true" />
 
-      <div className={`relative bg-[#F2F0ED] w-full shadow-2xl flex flex-col overflow-hidden
-                       border border-neutral-300 max-h-[92vh]
-                       ${isResults ? 'max-w-2xl' : 'max-w-lg'}`}>
+      <div className={[
+        'relative bg-[#F2F0ED] w-full shadow-2xl flex flex-col overflow-hidden',
+        'border border-neutral-300 max-h-[92vh]',
+        isResults ? 'max-w-2xl' : 'max-w-lg',
+      ].join(' ')}>
 
         {/* Progress bar */}
         <div className="h-1 bg-neutral-200 flex-shrink-0">
-          <div className="h-full bg-emerald-600 transition-all duration-500 ease-out" style={{ width: `${progress}%` }} />
+          <div className="h-full bg-emerald-600 transition-all duration-500 ease-out"
+               style={{ width: `${progress}%` }} />
         </div>
 
-        {/* Close */}
+        {/* Close button */}
         <button onClick={onClose} aria-label="Close"
           className="absolute top-4 right-5 z-10 text-neutral-400 hover:text-neutral-900 transition-colors">
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -352,611 +424,258 @@ export default function QuizModal({ isOpen, onClose }) {
         </button>
 
         <div className="overflow-y-auto overscroll-contain flex-1">
+          <AnimatePresence mode="wait" custom={dir} initial={false}>
+            <motion.div
+              key={step}
+              custom={dir}
+              variants={STEP_VARIANTS}
+              initial="enter"
+              animate="center"
+              exit="exit"
+            >
 
-          {/* ══════════════════════════  INTRO  ══════════════════════════════ */}
-          {step === 0 && (
-            <div className="px-10 py-12 space-y-5">
-              <div className="space-y-1">
-                <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Free Assessment</p>
-                <p className="text-xs text-neutral-400 font-light">9 sections · ~5 minutes</p>
-              </div>
-              <h2 className="font-display font-black text-3xl text-neutral-900 leading-tight tracking-tight">
-                Your Digital Health Profile
-              </h2>
-              <p className="text-sm text-neutral-600 font-light leading-relaxed">
-                This assessment is designed to identify your specific digital habits so we can assess
-                your individual needs. Don't be afraid to answer honestly — for our results to work,
-                we need accurate data. Remember, the addiction tools employed by tech companies aren't
-                your fault. Modern tech is designed to bypass human willpower; it's a conflict of
-                biology, not a failure of character.
-              </p>
-              <p className="text-sm text-neutral-600 font-light leading-relaxed">
-                By answering these questions honestly, you are gathering the intelligence we need to
-                build your exit strategy. Once completed, you'll receive our initial assessment and
-                the broad structure of your customised free 4-week recovery plan to give you back the
-                time you've been losing.
-              </p>
-              <button onClick={() => setStep(1)}
-                className="w-full bg-[#1A1A1A] text-white text-sm font-bold tracking-widest uppercase py-4 hover:bg-black transition-colors mt-2">
-                Start Assessment
-              </button>
-            </div>
-          )}
-
-          {/* ══════════════════════════  STEP 1: USAGE  ══════════════════════ */}
-          {step === 1 && (
-            <div className="px-10 py-10 space-y-8">
-              <StepHeader step={1} total={MAX_STEPS} />
-              <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Section 1: Usage</p>
-
-              {/* Q1a: Daily screen time */}
-              <div className="space-y-3">
-                <h3 className="font-display font-bold text-lg text-neutral-900 leading-snug">
-                  My average daily screen time is:
-                </h3>
-                <p className="text-xs text-neutral-400 font-light">
-                  iOS: Settings → Screen Time. Android: Settings → Digital Wellbeing.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {USAGE_HOURS_OPTIONS.map(opt => (
-                    <button key={opt.key} onClick={() => set('usageHours', opt.key)}
-                      className={chipClass(answers.usageHours === opt.key)}>
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Q1b: % unnecessary */}
-              <div className="space-y-3">
-                <h3 className="font-display font-bold text-lg text-neutral-900 leading-snug">
-                  What percentage of this time feels like unnecessary 'zombie usage' you'd like to reduce?
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {UNNECESSARY_PCT_OPTIONS.map(opt => (
-                    <button key={opt.key} onClick={() => set('unnecessaryPct', opt.key)}
-                      className={chipClass(answers.unnecessaryPct === opt.key)}>
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Q1c: Morning usage */}
-              <div className="space-y-3">
-                <h3 className="font-display font-bold text-lg text-neutral-900 leading-snug">
-                  I usually look at my phone within ten minutes of waking up.
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {MORNING_OPTIONS.map(opt => (
-                    <button key={opt.key} onClick={() => set('morningUsage', opt.key)}
-                      className={chipClass(answers.morningUsage === opt.key)}>
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Q1d: Work procrastination */}
-              <div className="space-y-3">
-                <h3 className="font-display font-bold text-lg text-neutral-900 leading-snug">
-                  I spend at least 1 hour procrastinating on my phone during work or productive hours.
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {WORK_PROC_OPTIONS.map(opt => (
-                    <button key={opt.key} onClick={() => set('workProcrastination', opt.key)}
-                      className={chipClass(answers.workProcrastination === opt.key)}>
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Q1e: Movie / book focus */}
-              <div className="space-y-3">
-                <h3 className="font-display font-bold text-lg text-neutral-900 leading-snug">
-                  I struggle to sit through a full-length movie or read a book chapter without checking my phone.
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {MOVIE_FOCUS_OPTIONS.map(opt => (
-                    <button key={opt.key} onClick={() => set('movieFocus', opt.key)}
-                      className={chipClass(answers.movieFocus === opt.key)}>
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Q1f: Social feedback */}
-              <div className="space-y-3">
-                <h3 className="font-display font-bold text-lg text-neutral-900 leading-snug">
-                  Family or friends have mentioned my phone usage to me recently.
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {SOCIAL_FB_OPTIONS.map(opt => (
-                    <button key={opt.key} onClick={() => set('socialFeedback', opt.key)}
-                      className={chipClass(answers.socialFeedback === opt.key)}>
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <NavRow onBack={retreat} onNext={advance} canNext={canAdvance()} />
-            </div>
-          )}
-
-          {/* ══════════════════════════  STEP 2: APP CATEGORIES  ═════════════ */}
-          {step === 2 && (
-            <div className="px-10 py-10 space-y-6">
-              <StepHeader step={2} total={MAX_STEPS} />
-              <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Section 2a: Landscape</p>
-              <div className="space-y-1">
-                <h2 className="font-display font-bold text-2xl text-neutral-900 leading-snug tracking-tight">
-                  What draws you to your phone most?
-                </h2>
-                <p className="text-sm text-neutral-400 font-light">Click to rank from most to least — your top choice first.</p>
-              </div>
-              <ul className="space-y-2">
-                {Q2_OPTIONS.map(opt => {
-                  const rank   = answers.q2_ranked.indexOf(opt.key)
-                  const ranked = rank !== -1
-                  return (
-                    <li key={opt.key}>
-                      <button onClick={() => set('q2_ranked', toggleRank(answers.q2_ranked, opt.key))}
-                        className={[
-                          'w-full text-left px-5 py-3.5 border transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-emerald-500',
-                          ranked ? 'border-emerald-600 bg-emerald-50' : 'border-neutral-200 hover:border-neutral-400',
-                        ].join(' ')}>
-                        <span className="flex items-center gap-3">
-                          <span className={[
-                            'w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold transition-all duration-150',
-                            ranked ? 'bg-emerald-600 text-white' : 'border border-neutral-300 text-neutral-300',
-                          ].join(' ')}>
-                            {ranked ? rank + 1 : ''}
-                          </span>
-                          <span className="flex flex-col">
-                            <span className={`text-sm font-medium ${ranked ? 'text-neutral-900' : 'text-neutral-600'}`}>{opt.label}</span>
-                            <span className="text-xs text-neutral-400 font-light mt-0.5">{opt.desc}</span>
-                          </span>
-                        </span>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-              {answers.q2_ranked.length > 0 && (
-                <p className="text-xs text-neutral-400 font-light">
-                  {answers.q2_ranked.length === Q2_OPTIONS.length ? 'All ranked.' : `${answers.q2_ranked.length} ranked. Keep going or tap Next.`}
-                </p>
-              )}
-              <NavRow onBack={retreat} onNext={advance} canNext={canAdvance()} />
-            </div>
-          )}
-
-          {/* ══════════════════════════  STEP 3: SUB-CATEGORIES  ═════════════ */}
-          {step === 3 && subCatData && (
-            <div className="px-10 py-10 space-y-6">
-              <StepHeader step={3} total={MAX_STEPS} />
-              <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Section 2b: Landscape</p>
-              <div className="space-y-1">
-                <h2 className="font-display font-bold text-2xl text-neutral-900 leading-snug tracking-tight">
-                  {subCatData.question}
-                </h2>
-                <p className="text-sm text-neutral-400 font-light">Select up to two.</p>
-              </div>
-              <ul className="space-y-2" role="group">
-                {subCatData.options.map(opt => {
-                  const active   = answers.q2b.includes(opt.key)
-                  const disabled = !active && answers.q2b.length >= 2
-                  return (
-                    <li key={opt.key}>
-                      <button onClick={() => set('q2b', toggleMultiMax2(answers.q2b, opt.key))} disabled={disabled}
-                        className={[optionClass(active), disabled ? 'opacity-30 cursor-not-allowed' : ''].join(' ')}>
-                        <span className="flex items-center gap-3">
-                          <CheckBox active={active} />
-                          {opt.label}
-                        </span>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-              <NavRow onBack={retreat} onNext={advance} canNext={canAdvance()} />
-            </div>
-          )}
-
-          {/* ══════════════════════════  STEP 4: PATTERNS  ═══════════════════ */}
-          {step === 4 && (
-            <div className="px-10 py-10 space-y-8">
-              <StepHeader step={4} total={MAX_STEPS} />
-              <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Section 3: Patterns</p>
-
-              {/* When */}
-              <div className="space-y-3">
-                <h3 className="font-display font-bold text-lg text-neutral-900 leading-snug">
-                  When do you feel most 'hooked' or likely to scroll aimlessly?
-                </h3>
-                <ul className="space-y-2" role="radiogroup">
-                  {WHEN_OPTIONS.map(opt => (
-                    <li key={opt.key}>
-                      <button role="radio" aria-checked={answers.when === opt.key}
-                        onClick={() => set('when', opt.key)} className={optionClass(answers.when === opt.key)}>
-                        <span className="flex items-center gap-3">
-                          <RadioDot active={answers.when === opt.key} />
-                          {opt.label}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Where */}
-              <div className="space-y-3">
-                <h3 className="font-display font-bold text-lg text-neutral-900 leading-snug">
-                  Think about that time. Where are you usually?
-                </h3>
-                <ul className="space-y-2" role="radiogroup">
-                  {WHERE_OPTIONS.map(opt => (
-                    <li key={opt.key}>
-                      <button role="radio" aria-checked={answers.where === opt.key}
-                        onClick={() => set('where', opt.key)} className={optionClass(answers.where === opt.key)}>
-                        <span className="flex items-center gap-3">
-                          <RadioDot active={answers.where === opt.key} />
-                          {opt.label}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Shadow test */}
-              <div className="space-y-3">
-                <h3 className="font-display font-bold text-lg text-neutral-900 leading-snug">
-                  Does your phone follow you from room to room like a shadow, or does it have a dedicated spot where it stays?
-                </h3>
-                <ul className="space-y-2" role="radiogroup">
-                  {SHADOW_OPTIONS.map(opt => (
-                    <li key={opt.key}>
-                      <button role="radio" aria-checked={answers.shadowStatus === opt.key}
-                        onClick={() => set('shadowStatus', opt.key)} className={optionClass(answers.shadowStatus === opt.key)}>
-                        <span className="flex items-center gap-3">
-                          <RadioDot active={answers.shadowStatus === opt.key} />
-                          {opt.label}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <NavRow onBack={retreat} onNext={advance} canNext={canAdvance()} />
-            </div>
-          )}
-
-          {/* ══════════════════════════  STEP 5: MOTIVES  ════════════════════ */}
-          {step === 5 && (
-            <div className="px-10 py-10 space-y-6">
-              <StepHeader step={5} total={MAX_STEPS} />
-              <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Section 4: Motive</p>
-              <div className="space-y-1">
-                <h2 className="font-display font-bold text-2xl text-neutral-900 leading-snug tracking-tight">
-                  Why do you use your phone?
-                </h2>
-                <p className="text-sm text-neutral-400 font-light">Rank all that apply — most important first.</p>
-              </div>
-              <ul className="space-y-2">
-                {MOTIVE_OPTIONS.map(opt => {
-                  const rank   = answers.motives_ranked.indexOf(opt.key)
-                  const ranked = rank !== -1
-                  return (
-                    <li key={opt.key}>
-                      <button onClick={() => set('motives_ranked', toggleRank(answers.motives_ranked, opt.key))}
-                        className={[
-                          'w-full text-left px-5 py-3.5 border transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-emerald-500',
-                          ranked ? 'border-emerald-600 bg-emerald-50' : 'border-neutral-200 hover:border-neutral-400',
-                        ].join(' ')}>
-                        <span className="flex items-center gap-3">
-                          <span className={[
-                            'w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold transition-all duration-150',
-                            ranked ? 'bg-emerald-600 text-white' : 'border border-neutral-300 text-neutral-300',
-                          ].join(' ')}>
-                            {ranked ? rank + 1 : ''}
-                          </span>
-                          <span className="flex flex-col">
-                            <span className={`text-sm font-medium ${ranked ? 'text-neutral-900' : 'text-neutral-600'}`}>{opt.label}</span>
-                            <span className="text-xs text-neutral-400 font-light mt-0.5">{opt.desc}</span>
-                          </span>
-                        </span>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-              {answers.motives_ranked.length > 0 && (
-                <p className="text-xs text-neutral-400 font-light">
-                  {answers.motives_ranked.length === MOTIVE_OPTIONS.length ? 'All ranked.' : `${answers.motives_ranked.length} ranked. Keep going or tap Next.`}
-                </p>
-              )}
-              <NavRow onBack={retreat} onNext={advance} canNext={canAdvance()} />
-            </div>
-          )}
-
-          {/* ══════════════════════════  STEP 6: SEVERITY & IMPACT  ══════════ */}
-          {step === 6 && (
-            <div className="px-10 py-10 space-y-8">
-              <StepHeader step={6} total={MAX_STEPS} />
-              <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Section 5: Severity & Impact</p>
-
-              {/* Q4: Impact area */}
-              <div className="space-y-3">
-                <h2 className="font-display font-bold text-2xl text-neutral-900 leading-snug tracking-tight">
-                  What part of your non-phone life is feeling the most neglected?
-                </h2>
-                <ul className="space-y-2" role="radiogroup">
-                  {Q4_OPTIONS.map(opt => (
-                    <li key={opt.key}>
-                      <button role="radio" aria-checked={answers.impactArea === opt.key}
-                        onClick={() => set('impactArea', opt.key)} className={optionClass(answers.impactArea === opt.key)}>
-                        <span className="flex items-center gap-3">
-                          <RadioDot active={answers.impactArea === opt.key} />
-                          {opt.label}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Q5: Severity */}
-              <div className="space-y-3">
-                <h2 className="font-display font-bold text-2xl text-neutral-900 leading-snug tracking-tight">
-                  How severe is this problem for you, honestly?
-                </h2>
-                <ul className="space-y-2" role="radiogroup">
-                  {Q5_OPTIONS.map(opt => (
-                    <li key={opt.key}>
-                      <button role="radio" aria-checked={answers.severity === opt.key}
-                        onClick={() => set('severity', opt.key)} className={optionClass(answers.severity === opt.key)}>
-                        <span className="flex items-center gap-3">
-                          <RadioDot active={answers.severity === opt.key} />
-                          {opt.label}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <NavRow onBack={retreat} onNext={advance} canNext={canAdvance()} />
-            </div>
-          )}
-
-          {/* ══════════════════════════  STEP 7: ATTENTION SPAN  ═════════════ */}
-          {step === 7 && (
-            <div className="px-10 py-10 space-y-6">
-              <StepHeader step={7} total={MAX_STEPS} />
-              <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Section 6: Attention Span</p>
-              <h2 className="font-display font-bold text-2xl text-neutral-900 leading-snug tracking-tight">
-                Which of the following best describes your typical experience when working on a project that requires 20 minutes of steady concentration?
-              </h2>
-              <ul className="space-y-2" role="radiogroup">
-                {ATTENTION_OPTIONS.map(opt => (
-                  <li key={opt.key}>
-                    <button role="radio" aria-checked={answers.attentionSpan === opt.key}
-                      onClick={() => set('attentionSpan', opt.key)} className={optionClass(answers.attentionSpan === opt.key)}>
-                      <span className="flex items-center gap-3">
-                        <RadioDot active={answers.attentionSpan === opt.key} />
-                        {opt.label}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              <NavRow onBack={retreat} onNext={advance} canNext={canAdvance()} />
-            </div>
-          )}
-
-          {/* ══════════════════════════  STEP 8: INTERESTS  ══════════════════ */}
-          {step === 8 && (
-            <div className="px-10 py-10 space-y-6">
-              <StepHeader step={8} total={MAX_STEPS} />
-              <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Section 7: Interests</p>
-              <div className="space-y-2">
-                <h2 className="font-display font-bold text-2xl text-neutral-900 leading-snug tracking-tight">
-                  If you had an extra hour of calm every day, what is one thing you'd actually like to do?
-                </h2>
-                <p className="text-xs text-neutral-400 font-light leading-relaxed">
-                  It might be something you used to do, or something you've seen someone else doing and thought
-                  "I wish I could do that." Avoid picking things that feel like 'work'. If you aren't sure, think
-                  back to what you enjoyed before you had a smartphone.
-                </p>
-              </div>
-              <textarea
-                rows={4}
-                placeholder="e.g. Reading fiction, learning guitar, painting, walking without headphones..."
-                value={answers.interests}
-                onChange={e => set('interests', e.target.value)}
-                className="w-full bg-white border border-neutral-200 px-4 py-3 text-sm font-sans
-                           text-neutral-900 placeholder:text-neutral-300 resize-none
-                           focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-              <NavRow onBack={retreat} onNext={advance} canNext={canAdvance()} />
-            </div>
-          )}
-
-          {/* ══════════════════════════  STEP 9: SOCIAL CONNECTION  ══════════ */}
-          {step === 9 && (
-            <div className="px-10 py-10 space-y-6">
-              <StepHeader step={9} total={MAX_STEPS} />
-              <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Section 8: Social Connection</p>
-              <h2 className="font-display font-bold text-2xl text-neutral-900 leading-snug tracking-tight">
-                How often do you socialise in person — whether just meeting friends or as part of a club/society?
-              </h2>
-              <ul className="space-y-2" role="radiogroup">
-                {SOCIAL_OPTIONS.map(opt => (
-                  <li key={opt.key}>
-                    <button role="radio" aria-checked={answers.socialConnection === opt.key}
-                      onClick={() => set('socialConnection', opt.key)} className={optionClass(answers.socialConnection === opt.key)}>
-                      <span className="flex items-center gap-3">
-                        <RadioDot active={answers.socialConnection === opt.key} />
-                        {opt.label}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              <NavRow onBack={retreat} onNext={advance} canNext={canAdvance()} />
-            </div>
-          )}
-
-          {/* ══════════════════════════  STEP 10: RESULTS  ═══════════════════ */}
-          {isResults && (
-            <div className="divide-y divide-neutral-200">
-
-              {/* Letterhead */}
-              <div className="px-10 py-8 flex items-start justify-between gap-6">
-                <div>
-                  <p className="text-xs tracking-widest uppercase text-neutral-400 font-light mb-1.5">Mind Sovereignty</p>
-                  <h2 className="font-display font-black text-2xl text-neutral-900 tracking-tight">Your Sovereignty Assessment</h2>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <p className="text-xs text-neutral-300 font-light">{today}</p>
-                  <p className="text-xs text-neutral-200 font-mono mt-0.5">{refNum}</p>
-                </div>
-              </div>
-
-              {/* Archetype */}
-              <div className="px-10 py-7 space-y-3">
-                <div className="flex items-baseline gap-3">
-                  <span className="text-xs font-mono text-neutral-300">01</span>
-                  <p className="text-xs tracking-widest uppercase text-neutral-400 font-light">Your Sovereignty Archetype</p>
-                </div>
-                <h3 className="font-display font-black text-3xl text-neutral-900 tracking-tight">
-                  {archetype.name}
-                </h3>
-                <p className="text-sm text-neutral-600 font-light leading-relaxed">
-                  {archetype.subtitle}
-                </p>
-                {answers.severity && (
-                  <div className="inline-flex items-center gap-2 bg-neutral-900 px-3 py-1.5 mt-1">
-                    <span className="text-xs text-white/50 font-light tracking-widest uppercase">Severity</span>
-                    <span className="text-xs text-white font-bold tracking-wide uppercase">{Q5_LABEL[answers.severity]}</span>
+              {/* ══════════════════════  INTRO  ══════════════════════════════ */}
+              {step === 0 && (
+                <div className="px-10 py-12 space-y-5">
+                  <div className="space-y-1">
+                    <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Free Assessment</p>
+                    <p className="text-xs text-neutral-400 font-light">6 sections · ~3 minutes</p>
                   </div>
-                )}
-              </div>
-
-              {/* Cognitive Leakage Chart */}
-              <div className="px-10 py-7 space-y-4">
-                <div className="flex items-baseline gap-3">
-                  <span className="text-xs font-mono text-neutral-300">02</span>
-                  <div>
-                    <p className="text-xs tracking-widest uppercase text-neutral-400 font-light">Cognitive Leakage</p>
-                    <p className="text-xs text-neutral-300 font-light mt-0.5">Where your mental energy is being spent</p>
-                  </div>
+                  <h2 className="font-display font-black text-3xl text-neutral-900 leading-tight tracking-tight">
+                    Your Digital Health Profile
+                  </h2>
+                  <p className="text-sm text-neutral-600 font-light leading-relaxed">
+                    Complete this assessment to unlock your results and start your customised 4-week recovery
+                    plan. Be honest — we need accurate data to build your exit strategy. There is zero shame
+                    in your results. Modern tech is designed to bypass human willpower. This is a conflict of
+                    biology, not a failure of character.
+                  </p>
+                  <button onClick={() => { setDir(1); setStep(1) }}
+                    className="w-full bg-[#1A1A1A] text-white text-sm font-bold tracking-widest uppercase py-4 hover:bg-black transition-colors mt-2">
+                    Start Assessment
+                  </button>
                 </div>
-                <ResponsiveContainer width="100%" height={130}>
-                  <BarChart layout="vertical" data={leakageData} margin={{ top: 4, right: 44, bottom: 4, left: 0 }}>
-                    <XAxis type="number" domain={[0, 100]} hide />
-                    <YAxis
-                      type="category" dataKey="name" width={130}
-                      tick={{ fontSize: 11, fill: '#888', fontFamily: 'Inter, sans-serif' }}
-                      axisLine={false} tickLine={false}
-                    />
-                    <Bar dataKey="value" radius={[0, 2, 2, 0]}
-                      label={{ position: 'right', fontSize: 11, fill: '#aaa', fontFamily: 'monospace', formatter: v => `${v}` }}>
-                      {leakageData.map((entry, i) => (
-                        <Cell key={i} fill={entry.color} />
+              )}
+
+              {/* ══════════════════════  STEP 1: USAGE  ══════════════════════ */}
+              {step === 1 && (
+                <div className="px-10 py-10 space-y-8">
+                  <StepHeader step={1} total={MAX_STEPS} />
+                  <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Section 1: Usage</p>
+
+                  <div className="space-y-3">
+                    <h3 className="font-display font-bold text-lg text-neutral-900 leading-snug">
+                      Average daily screen time:
+                    </h3>
+                    <p className="text-xs text-neutral-400 font-light">
+                      iOS: Settings → Screen Time. Android: Settings → Digital Wellbeing.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {HOURS_OPTIONS.map(opt => (
+                        <button key={opt.key} onClick={() => set('hours', opt.key)}
+                          className={chipClass(answers.hours === opt.key)}>
+                          {opt.label}
+                        </button>
                       ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* 4-Week Plan preview */}
-              <div className="px-10 py-7 space-y-3">
-                <div className="flex items-baseline gap-3">
-                  <span className="text-xs font-mono text-neutral-300">03</span>
-                  <p className="text-xs tracking-widest uppercase text-neutral-400 font-light">Your 4-Week Recovery Plan</p>
-                </div>
-                <div className="bg-white border border-neutral-200 px-5 py-4">
-                  <ul className="text-xs text-neutral-400 font-light space-y-2">
-                    <li><span className="text-neutral-700 font-semibold">Phase 1: The Reset</span> — Start your hobby, inform friends of the challenge, write down your intentions.</li>
-                    <li><span className="text-neutral-700 font-semibold">Phase 2: The Itch</span> — Fully delete your trigger apps. Sit with the biological pressure to revert.</li>
-                    <li><span className="text-neutral-700 font-semibold">Phase 3: Rebuilding Focus</span> — Feel the neurological benefits. Concentrate heavily on your interests.</li>
-                    <li><span className="text-neutral-700 font-semibold">Phase 4: The New Normal</span> — Freedom from compulsive loops and dopamine irregularity.</li>
-                  </ul>
-                </div>
-              </div>
-
-              {/* Email capture */}
-              <div className="px-10 py-7 space-y-4">
-                <div className="flex items-baseline gap-3">
-                  <span className="text-xs font-mono text-neutral-300">04</span>
-                  <div>
-                    <p className="text-xs tracking-widest uppercase text-neutral-400 font-light">Get Your Full Recovery Plan</p>
-                    <p className="text-xs text-neutral-300 font-light mt-0.5">Free · Sent to your inbox · No spam</p>
-                  </div>
-                </div>
-
-                {!emailSent ? (
-                  <form onSubmit={handleEmailSubmit} className="space-y-3">
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <input
-                        type="email" required placeholder="your@email.com"
-                        value={email} onChange={e => setEmail(e.target.value)}
-                        className="flex-1 bg-white border border-neutral-200 px-4 py-3.5 text-sm font-sans
-                                   text-neutral-900 placeholder:text-neutral-300
-                                   focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      />
-                      <button type="submit" disabled={saving}
-                        className={`bg-[#1A1A1A] text-white whitespace-nowrap text-xs font-bold tracking-widest uppercase px-6 py-3.5 hover:bg-black transition-colors ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                        {saving ? 'Saving…' : 'Send My Plan'}
-                      </button>
                     </div>
-                    <label className="flex items-center gap-3 cursor-pointer group">
-                      <span onClick={() => setNewsletter(n => !n)}
-                        className={`w-4 h-4 border flex-shrink-0 flex items-center justify-center transition-colors duration-150 cursor-pointer
-                                    ${newsletter ? 'bg-emerald-600 border-emerald-600' : 'border-neutral-300 group-hover:border-emerald-400'}`}>
-                        {newsletter && (
-                          <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
-                            <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        )}
-                      </span>
-                      <span className="text-xs text-neutral-400 font-light" onClick={() => setNewsletter(n => !n)}>
-                        Subscribe to our research updates — science-backed insights on attention, habit and focus.
-                      </span>
-                    </label>
-                  </form>
-                ) : (
-                  <div className="bg-[#1A1A1A] px-6 py-5 space-y-1">
-                    <p className="text-base font-display font-bold text-white">Your Roadmap Is On Its Way.</p>
-                    <p className="text-xs text-white/55 font-light leading-relaxed">
-                      Your personalised 4-week recovery plan — Phase 1: The Reset, Phase 2: The Itch,
-                      Phase 3: Rebuilding Focus, and Phase 4: The New Normal — is heading to your inbox.
+                  </div>
+
+                  <div className="space-y-3">
+                    <h3 className="font-display font-bold text-lg text-neutral-900 leading-snug">
+                      What percentage of that time feels like unconscious 'zombie' usage?
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {ZOMBIE_OPTIONS.map(opt => (
+                        <button key={opt.key} onClick={() => set('zombie', opt.key)}
+                          className={chipClass(answers.zombie === opt.key)}>
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h3 className="font-display font-bold text-lg text-neutral-900 leading-snug">
+                      Estimated daily phone pickups:
+                    </h3>
+                    <p className="text-xs text-neutral-400 font-light">
+                      iOS: Screen Time → Pickups. Android: Digital Wellbeing → Unlocks.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {PICKUP_OPTIONS.map(opt => (
+                        <button key={opt.key} onClick={() => set('pickups', opt.key)}
+                          className={chipClass(answers.pickups === opt.key)}>
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <NavRow onBack={retreat} onNext={advance} canNext={canAdvance()} />
+                </div>
+              )}
+
+              {/* ══════════════════════  STEP 2: CONTENT  ════════════════════ */}
+              {step === 2 && (
+                <div className="px-10 py-10 space-y-6">
+                  <StepHeader step={2} total={MAX_STEPS} />
+                  <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Section 2: Content</p>
+                  <div className="space-y-1">
+                    <h2 className="font-display font-bold text-2xl text-neutral-900 leading-snug tracking-tight">
+                      What does your screen time consist of?
+                    </h2>
+                    <p className="text-sm text-neutral-400 font-light">
+                      Adjust the sliders to reflect your breakdown — they always sum to 100%.
                     </p>
                   </div>
-                )}
-              </div>
+                  <ContentSliders content={answers.content} onChange={adjustContent} />
+                  <NavRow onBack={retreat} onNext={advance} canNext={canAdvance()} />
+                </div>
+              )}
 
-              {/* Retake */}
-              <div className="px-10 py-7">
-                <button
-                  onClick={() => {
-                    setStep(0); setAnswers(initAnswers())
+              {/* ══════════════════════  STEP 3: SITUATION  ══════════════════ */}
+              {step === 3 && (
+                <div className="px-10 py-10 space-y-6">
+                  <StepHeader step={3} total={MAX_STEPS} />
+                  <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Section 3: Situation</p>
+                  <div className="space-y-1">
+                    <h2 className="font-display font-bold text-2xl text-neutral-900 leading-snug tracking-tight">
+                      When does the usage typically occur?
+                    </h2>
+                    <p className="text-sm text-neutral-400 font-light">Select all that apply.</p>
+                  </div>
+                  <ul className="space-y-2">
+                    {SITUATION_OPTIONS.map(opt => {
+                      const active = answers.situation.includes(opt.key)
+                      return (
+                        <li key={opt.key}>
+                          <button onClick={() => set('situation', toggleCheck(answers.situation, opt.key))}
+                            className={optionClass(active)}>
+                            <span className="flex items-center gap-3">
+                              <CheckBox active={active} />
+                              {opt.label}
+                            </span>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                  <NavRow onBack={retreat} onNext={advance} canNext={canAdvance()} />
+                </div>
+              )}
+
+              {/* ══════════════════════  STEP 4: IMPACT  ═════════════════════ */}
+              {step === 4 && (
+                <div className="px-10 py-10 space-y-6">
+                  <StepHeader step={4} total={MAX_STEPS} />
+                  <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Section 4: Impact</p>
+                  <div className="space-y-1">
+                    <h2 className="font-display font-bold text-2xl text-neutral-900 leading-snug tracking-tight">
+                      What impact are you noticing?
+                    </h2>
+                    <p className="text-sm text-neutral-400 font-light">Select all that apply.</p>
+                  </div>
+                  <ul className="space-y-2">
+                    {IMPACT_OPTIONS.map(opt => {
+                      const active = answers.impact.includes(opt.key)
+                      return (
+                        <li key={opt.key}>
+                          <button onClick={() => set('impact', toggleCheck(answers.impact, opt.key))}
+                            className={optionClass(active)}>
+                            <span className="flex items-center gap-3">
+                              <CheckBox active={active} />
+                              {opt.label}
+                            </span>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                  <NavRow onBack={retreat} onNext={advance} canNext={canAdvance()} />
+                </div>
+              )}
+
+              {/* ══════════════════════  STEP 5: ATTENTION  ══════════════════ */}
+              {step === 5 && (
+                <div className="px-10 py-10 space-y-6">
+                  <StepHeader step={5} total={MAX_STEPS} />
+                  <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Section 5: Attention</p>
+                  <h2 className="font-display font-bold text-2xl text-neutral-900 leading-snug tracking-tight">
+                    When working on a project for an hour, which best describes your experience?
+                  </h2>
+                  <ul className="space-y-2" role="radiogroup">
+                    {ATTENTION_OPTIONS.map(opt => {
+                      const active = answers.attention === opt.key
+                      return (
+                        <li key={opt.key}>
+                          <button role="radio" aria-checked={active}
+                            onClick={() => set('attention', opt.key)}
+                            className={optionClass(active)}>
+                            <span className="flex items-start gap-3">
+                              <RadioDot active={active} />
+                              <span className="flex flex-col gap-0.5">
+                                <span className="text-sm font-semibold text-neutral-800">{opt.label}</span>
+                                <span className="text-xs font-light text-neutral-500 leading-relaxed">{opt.desc}</span>
+                              </span>
+                            </span>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                  <NavRow onBack={retreat} onNext={advance} canNext={canAdvance()} />
+                </div>
+              )}
+
+              {/* ══════════════════════  STEP 6: INTERESTS  ══════════════════ */}
+              {step === 6 && (
+                <div className="px-10 py-10 space-y-6">
+                  <StepHeader step={6} total={MAX_STEPS} />
+                  <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Section 6: Interests</p>
+                  <div className="space-y-2">
+                    <h2 className="font-display font-bold text-2xl text-neutral-900 leading-snug tracking-tight">
+                      If you had an extra hour of calm, what is one hobby or skill you'd enjoy?
+                    </h2>
+                    <p className="text-xs text-neutral-400 font-light leading-relaxed">
+                      The 'Rat Park' Strategy — behavioral substitution, not willpower, is the mechanism of
+                      recovery. Think of what you enjoyed before the smartphone colonised your time.
+                    </p>
+                  </div>
+                  <textarea
+                    rows={4}
+                    placeholder="e.g. Reading fiction, learning guitar, painting, walking without headphones..."
+                    value={answers.interests}
+                    onChange={e => set('interests', e.target.value)}
+                    className="w-full bg-white border border-neutral-200 px-4 py-3 text-sm font-sans
+                               text-neutral-900 placeholder:text-neutral-300 resize-none
+                               focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                  <NavRow onBack={retreat} onNext={advance} canNext={canAdvance()} nextLabel="View Results" />
+                </div>
+              )}
+
+              {/* ══════════════════════  STEP 7: RESULTS  ════════════════════ */}
+              {isResults && (
+                <ResultsScreen
+                  answers={answers}
+                  scores={scores}
+                  refNum={refNum}
+                  email={email}
+                  setEmail={setEmail}
+                  newsletter={newsletter}
+                  setNewsletter={setNewsletter}
+                  emailSent={emailSent}
+                  saving={saving}
+                  onEmailSubmit={handleEmailSubmit}
+                  onRetake={() => {
+                    setDir(-1); setStep(0); setAnswers(initAnswers())
                     setEmailSent(false); setEmail(''); setSaving(false); setNewsletter(false)
                   }}
-                  className="w-full border border-neutral-300 bg-white text-neutral-600 text-xs font-bold tracking-widest uppercase py-3.5 hover:border-neutral-600 hover:text-neutral-900 transition-colors">
-                  Retake Assessment
-                </button>
-              </div>
+                />
+              )}
 
-            </div>
-          )}
-
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
     </div>
@@ -964,16 +683,357 @@ export default function QuizModal({ isOpen, onClose }) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
+   RESULTS SCREEN
+───────────────────────────────────────────────────────────────────────────── */
+function ResultsScreen({
+  answers, scores, refNum,
+  email, setEmail, newsletter, setNewsletter,
+  emailSent, saving, onEmailSubmit, onRetake,
+}) {
+  const today = new Date().toLocaleDateString('en-GB', {
+    day: 'numeric', month: 'long', year: 'numeric',
+  })
+
+  const radarData = [
+    { subject: 'Usage',     value: scores.usage     },
+    { subject: 'Content',   value: scores.content   },
+    { subject: 'Situation', value: scores.situation },
+    { subject: 'Impact',    value: scores.impact    },
+    { subject: 'Attention', value: scores.attention },
+  ]
+
+  const report = [
+    { label: 'Usage',     score: scores.usage,     text: getUsageInsight(answers)              },
+    { label: 'Content',   score: scores.content,   text: getContentInsight(answers.content)    },
+    { label: 'Situation', score: scores.situation,  text: getSituationInsight(answers.situation) },
+    { label: 'Impact',    score: scores.impact,    text: getImpactInsight(answers.impact)      },
+    { label: 'Attention', score: scores.attention, text: getAttentionInsight(answers.attention) },
+  ]
+
+  const sectionOffset = answers.interests ? 1 : 0
+
+  return (
+    <div className="divide-y divide-neutral-200">
+
+      {/* Letterhead */}
+      <div className="px-10 py-8 flex items-start justify-between gap-6">
+        <div>
+          <p className="text-xs tracking-widest uppercase text-neutral-400 font-light mb-1.5">Mind Sovereignty</p>
+          <h2 className="font-display font-black text-2xl text-neutral-900 tracking-tight">
+            Digital Health Assessment
+          </h2>
+        </div>
+        <div className="text-right flex-shrink-0">
+          <p className="text-xs text-neutral-300 font-light">{today}</p>
+          <p className="text-xs text-neutral-200 font-mono mt-0.5">{refNum}</p>
+        </div>
+      </div>
+
+      {/* 5-Axis Radar Chart */}
+      <div className="px-10 py-8 space-y-4">
+        <div className="flex items-baseline gap-3">
+          <span className="text-xs font-mono text-neutral-300">01</span>
+          <div>
+            <p className="text-xs tracking-widest uppercase text-neutral-400 font-light">Risk Profile</p>
+            <p className="text-xs text-neutral-300 font-light mt-0.5">Outer perimeter = higher risk exposure (0–100)</p>
+          </div>
+        </div>
+        <AssessmentRadar data={radarData} />
+      </div>
+
+      {/* Clinical Assessment Report */}
+      <div className="px-10 py-8 space-y-6">
+        <div className="flex items-baseline gap-3">
+          <span className="text-xs font-mono text-neutral-300">02</span>
+          <p className="text-xs tracking-widest uppercase text-neutral-400 font-light">Clinical Assessment</p>
+        </div>
+
+        {report.map(({ label, score, text }) => (
+          <div key={label} className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold tracking-widest uppercase text-neutral-500">{label}</p>
+              <span className={[
+                'text-xs font-mono font-bold px-2 py-0.5',
+                score >= 75 ? 'bg-red-900/10 text-red-700'     :
+                score >= 50 ? 'bg-amber-900/10 text-amber-700' :
+                              'bg-neutral-100 text-neutral-500',
+              ].join(' ')}>{score}/100</span>
+            </div>
+            <p className="text-sm text-neutral-600 font-light leading-relaxed">{text}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Rat Park Protocol (interests) */}
+      {answers.interests && (
+        <div className="px-10 py-7 space-y-3">
+          <div className="flex items-baseline gap-3">
+            <span className="text-xs font-mono text-neutral-300">03</span>
+            <p className="text-xs tracking-widest uppercase text-neutral-400 font-light">Rat Park Protocol</p>
+          </div>
+          <div className="bg-white border border-neutral-200 px-5 py-4">
+            <p className="text-xs text-neutral-400 font-light leading-relaxed">
+              Your identified replacement activity —{' '}
+              <span className="text-neutral-700 font-medium italic">"{answers.interests}"</span>
+              {' '}— is the behavioral anchor of your recovery plan. Willpower is not the mechanism.
+              Environmental redesign and substitution are. This is what fills the space.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* CTA / Email Capture */}
+      <div className="px-10 py-7 space-y-4">
+        <div className="flex items-baseline gap-3">
+          <span className="text-xs font-mono text-neutral-300">0{3 + sectionOffset}</span>
+          <div>
+            <p className="text-xs tracking-widest uppercase text-neutral-400 font-light">Initiate Your Protocol</p>
+            <p className="text-xs text-neutral-300 font-light mt-0.5">Free · Delivered to your inbox · No spam</p>
+          </div>
+        </div>
+
+        {!emailSent ? (
+          <form onSubmit={onEmailSubmit} className="space-y-3">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input
+                type="email" required placeholder="your@email.com"
+                value={email} onChange={e => setEmail(e.target.value)}
+                className="flex-1 bg-white border border-neutral-200 px-4 py-3.5 text-sm font-sans
+                           text-neutral-900 placeholder:text-neutral-300
+                           focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+              <button type="submit" disabled={saving}
+                className={[
+                  'bg-[#1A1A1A] text-white whitespace-nowrap text-xs font-bold tracking-widest',
+                  'uppercase px-6 py-3.5 hover:bg-black transition-colors',
+                  saving ? 'opacity-50 cursor-not-allowed' : '',
+                ].join(' ')}>
+                {saving ? 'Saving…' : 'Initiate My 4-Week Protocol'}
+              </button>
+            </div>
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <span onClick={() => setNewsletter(n => !n)}
+                className={[
+                  'w-4 h-4 border flex-shrink-0 flex items-center justify-center',
+                  'transition-colors duration-150 cursor-pointer',
+                  newsletter
+                    ? 'bg-emerald-600 border-emerald-600'
+                    : 'border-neutral-300 group-hover:border-emerald-400',
+                ].join(' ')}>
+                {newsletter && (
+                  <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
+                    <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+              </span>
+              <span className="text-xs text-neutral-400 font-light" onClick={() => setNewsletter(n => !n)}>
+                Subscribe to science-backed research on attention, habit, and focus.
+              </span>
+            </label>
+          </form>
+        ) : (
+          <div className="bg-[#1A1A1A] px-6 py-5 space-y-1">
+            <p className="text-base font-display font-bold text-white">Protocol Initiated.</p>
+            <p className="text-xs text-white/55 font-light leading-relaxed">
+              Your personalised 4-week recovery plan is heading to your inbox. Phase 1 starts the moment
+              you close this window.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Retake */}
+      <div className="px-10 py-7">
+        <button onClick={onRetake}
+          className="w-full border border-neutral-300 bg-white text-neutral-600 text-xs font-bold
+                     tracking-widest uppercase py-3.5 hover:border-neutral-600 hover:text-neutral-900
+                     transition-colors">
+          Retake Assessment
+        </button>
+      </div>
+
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   CONTENT SLIDERS — Donut chart + 4 linked range inputs
+───────────────────────────────────────────────────────────────────────────── */
+function ContentSliders({ content, onChange }) {
+  const pieData = CONTENT_KEYS.map(k => ({
+    name:  CONTENT_META[k].label,
+    value: content[k],
+    color: CONTENT_META[k].chartColor,
+  }))
+
+  return (
+    <div className="space-y-6">
+      {/* Donut chart */}
+      <div className="flex items-center justify-center">
+        <div className="relative" style={{ width: 180, height: 180 }}>
+          <ResponsiveContainer width={180} height={180}>
+            <PieChart>
+              <Pie
+                data={pieData}
+                cx="50%"
+                cy="50%"
+                innerRadius={52}
+                outerRadius={84}
+                dataKey="value"
+                startAngle={90}
+                endAngle={-270}
+                strokeWidth={0}
+              >
+                {pieData.map((entry, i) => (
+                  <Cell key={i} fill={entry.color} />
+                ))}
+              </Pie>
+            </PieChart>
+          </ResponsiveContainer>
+          {/* Centre label */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="text-center">
+              <p className="text-lg font-bold font-mono text-neutral-800">100</p>
+              <p className="text-[10px] text-neutral-400 font-light leading-none">%</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Sliders */}
+      <div className="space-y-4">
+        {CONTENT_KEYS.map(key => {
+          const { label, chartColor, textColor } = CONTENT_META[key]
+          const val = content[key]
+          return (
+            <div key={key} className="space-y-1.5">
+              <div className="flex justify-between items-center">
+                <label className="text-sm font-medium" style={{ color: textColor }}>
+                  {label}
+                </label>
+                <span className="text-sm font-mono text-neutral-500">{val}%</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={val}
+                onChange={e => onChange(key, Number(e.target.value))}
+                className="w-full h-1.5 appearance-none cursor-pointer rounded-full"
+                style={{
+                  background: `linear-gradient(to right, ${chartColor} ${val}%, #e5e7eb ${val}%)`,
+                }}
+              />
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   ASSESSMENT RADAR — 5-axis risk chart
+───────────────────────────────────────────────────────────────────────────── */
+function AssessmentRadar({ data }) {
+  return (
+    <div className="space-y-4">
+      <ResponsiveContainer width="100%" height={280}>
+        <RadarChart
+          cx="50%"
+          cy="50%"
+          outerRadius="72%"
+          data={data}
+          startAngle={90}
+          endAngle={90 - 360}
+        >
+          <PolarGrid gridType="polygon" stroke="rgba(44,44,44,0.08)" />
+          <PolarAngleAxis
+            dataKey="subject"
+            tick={<RadarAxisTick />}
+            axisLine={false}
+            tickLine={false}
+          />
+          <PolarRadiusAxis
+            domain={[0, 100]}
+            tickCount={5}
+            tick={false}
+            axisLine={false}
+          />
+          <Radar
+            dataKey="value"
+            stroke="#c0614e"
+            fill="#c0614e"
+            fillOpacity={0.15}
+            strokeWidth={1.5}
+            dot={{ r: 3, fill: '#c0614e', strokeWidth: 0 }}
+          />
+          <Tooltip content={<RadarTooltip />} />
+        </RadarChart>
+      </ResponsiveContainer>
+
+      {/* Score pills */}
+      <div className="grid grid-cols-5 gap-1.5 text-center">
+        {data.map(({ subject, value }) => (
+          <div key={subject} className="space-y-0.5">
+            <div className={[
+              'text-base font-display font-bold',
+              value >= 75 ? 'text-red-700'    :
+              value >= 50 ? 'text-amber-600'  :
+                            'text-neutral-500',
+            ].join(' ')}>{value}</div>
+            <div className="text-[10px] text-neutral-400 font-sans font-light leading-tight">
+              {subject}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function RadarAxisTick({ x, y, payload }) {
+  return (
+    <text
+      x={x} y={y}
+      textAnchor="middle"
+      dominantBaseline="central"
+      style={{
+        fontSize: '11px',
+        fontFamily: 'Inter, system-ui, sans-serif',
+        fill: 'rgba(44,44,44,0.50)',
+        fontWeight: 400,
+      }}
+    >
+      {payload.value}
+    </text>
+  )
+}
+
+function RadarTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null
+  const { subject, value } = payload[0].payload
+  return (
+    <div className="bg-[#1A1A1A] text-white text-xs font-sans font-light px-3 py-2 shadow-lg">
+      <span className="font-semibold">{subject}</span>
+      <span className="ml-2 font-mono">{value}</span>
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
    SMALL REUSABLE PIECES
 ───────────────────────────────────────────────────────────────────────────── */
-
 function StepHeader({ step, total }) {
   return (
     <div className="flex items-center justify-between">
       <p className="text-xs text-neutral-400 font-light tracking-wide">Step {step} of {total}</p>
       <div className="flex gap-1">
         {Array.from({ length: total }, (_, i) => (
-          <div key={i} className={`h-1 w-5 transition-colors duration-300 ${i < step ? 'bg-emerald-500' : 'bg-neutral-200'}`} />
+          <div key={i} className={[
+            'h-1 w-5 transition-colors duration-300',
+            i < step ? 'bg-emerald-500' : 'bg-neutral-200',
+          ].join(' ')} />
         ))}
       </div>
     </div>
@@ -991,8 +1051,11 @@ function NavRow({ onBack, onNext, canNext, nextLabel = 'Next' }) {
         Back
       </button>
       <button onClick={onNext} disabled={!canNext}
-        className={`bg-[#1A1A1A] text-white text-xs font-bold tracking-widest uppercase py-3 px-6 hover:bg-black transition-colors
-                    ${!canNext ? 'opacity-25 cursor-not-allowed' : ''}`}>
+        className={[
+          'bg-[#1A1A1A] text-white text-xs font-bold tracking-widest uppercase py-3 px-6',
+          'hover:bg-black transition-colors',
+          !canNext ? 'opacity-25 cursor-not-allowed' : '',
+        ].join(' ')}>
         {nextLabel}
       </button>
     </div>
@@ -1001,8 +1064,10 @@ function NavRow({ onBack, onNext, canNext, nextLabel = 'Next' }) {
 
 function RadioDot({ active }) {
   return (
-    <span className={`w-4 h-4 rounded-full border flex-shrink-0 flex items-center justify-center
-                      transition-colors duration-150 ${active ? 'border-emerald-600' : 'border-neutral-300'}`}>
+    <span className={[
+      'w-4 h-4 rounded-full border flex-shrink-0 flex items-center justify-center transition-colors duration-150',
+      active ? 'border-emerald-600' : 'border-neutral-300',
+    ].join(' ')}>
       {active && <span className="w-2 h-2 rounded-full bg-emerald-600" />}
     </span>
   )
@@ -1010,8 +1075,10 @@ function RadioDot({ active }) {
 
 function CheckBox({ active }) {
   return (
-    <span className={`w-4 h-4 border flex-shrink-0 flex items-center justify-center transition-colors duration-150
-                      ${active ? 'bg-emerald-600 border-emerald-600' : 'border-neutral-300'}`}>
+    <span className={[
+      'w-4 h-4 border flex-shrink-0 flex items-center justify-center transition-colors duration-150',
+      active ? 'bg-emerald-600 border-emerald-600' : 'border-neutral-300',
+    ].join(' ')}>
       {active && (
         <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
           <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>

@@ -7,14 +7,13 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from 'recharts'
-import { PILLAR_SHORT } from '../lib/scores'
 
 /* ── Custom tooltip ────────────────────────────────────────────────────────── */
 function CustomTooltip({ active, payload }) {
   if (!active || !payload?.length) return null
   const { subject, value } = payload[0].payload
   return (
-    <div className="bg-charcoal text-white text-xs font-sans font-light px-3 py-2 shadow-lg">
+    <div className="bg-[#1A1A1A] text-white text-xs font-sans font-light px-3 py-2 shadow-lg">
       <span className="font-semibold">{subject}</span>
       <span className="ml-2 font-mono">{value}</span>
     </div>
@@ -42,21 +41,38 @@ function AxisTick({ x, y, payload }) {
 }
 
 /* ── Main component ────────────────────────────────────────────────────────── */
-export default function SovereigntyRadar({ scores }) {
-  if (!scores) return null
+// Accepts either:
+//   data  = [{ subject: string, value: number }, ...]  (generic)
+//   scores = { focus_endurance, digital_autonomy, ... } (legacy)
+export default function SovereigntyRadar({ data, scores }) {
+  const PILLAR_SHORT = {
+    focus_endurance:    'Focus',
+    digital_autonomy:   'Autonomy',
+    boundary_integrity: 'Boundaries',
+    emotional_stability:'Emotional',
+    utility_efficiency: 'Utility',
+  }
 
-  const data = [
-    { subject: PILLAR_SHORT.focus_endurance,     value: scores.focus_endurance     },
-    { subject: PILLAR_SHORT.digital_autonomy,    value: scores.digital_autonomy    },
-    { subject: PILLAR_SHORT.boundary_integrity,  value: scores.boundary_integrity  },
-    { subject: PILLAR_SHORT.emotional_stability, value: scores.emotional_stability },
-    { subject: PILLAR_SHORT.utility_efficiency,  value: scores.utility_efficiency  },
-  ]
+  const chartData = data ?? (scores
+    ? Object.entries(scores).map(([k, v]) => ({
+        subject: PILLAR_SHORT[k] ?? k,
+        value:   v,
+      }))
+    : [])
+
+  if (!chartData.length) return null
 
   return (
     <div className="space-y-4">
       <ResponsiveContainer width="100%" height={280}>
-        <RadarChart cx="50%" cy="50%" outerRadius="72%" data={data}>
+        <RadarChart
+          cx="50%"
+          cy="50%"
+          outerRadius="72%"
+          data={chartData}
+          startAngle={90}
+          endAngle={90 - 360}
+        >
           <PolarGrid
             gridType="polygon"
             stroke="rgba(44,44,44,0.08)"
@@ -87,7 +103,7 @@ export default function SovereigntyRadar({ scores }) {
 
       {/* Score pills below chart */}
       <div className="grid grid-cols-5 gap-1.5 text-center">
-        {data.map(({ subject, value }) => (
+        {chartData.map(({ subject, value }) => (
           <div key={subject} className="space-y-0.5">
             <div className="text-base font-display font-bold text-charcoal">
               {value}

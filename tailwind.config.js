@@ -25,12 +25,14 @@ export default {
       },
       fontFamily: {
         // Outfit: modern geometric sans — used for all headings
-        display: ['Outfit', 'system-ui', 'sans-serif'],
-        sans:    ['Inter',  'system-ui', 'sans-serif'],
+        display:  ['Outfit', 'system-ui', 'sans-serif'],
+        sans:     ['Inter',  'system-ui', 'sans-serif'],
         // Playfair kept for rare accent use only
-        serif:   ['"Playfair Display"', 'Georgia', 'serif'],
+        serif:    ['"Playfair Display"', 'Georgia', 'serif'],
         // Avenir Next — system font on Apple devices, falls back to system-ui elsewhere
-        nunito:  ['"Avenir Next"', 'Avenir', 'system-ui', 'sans-serif'],
+        nunito:   ['"Avenir Next"', 'Avenir', 'system-ui', 'sans-serif'],
+        // Fredoka — friendly rounded bold for dopaminehero brand
+        fredoka:  ['Fredoka', 'system-ui', 'sans-serif'],
       },
       letterSpacing: {
         widest2: '0.2em',
