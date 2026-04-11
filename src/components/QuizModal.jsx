@@ -12,13 +12,13 @@ import { supabase } from '../lib/supabase'
    1  → Usage       (Hours · Zombie% · Pickups)      [USAGE axis]
    2  → Content     (Donut + 4 linked sliders)        [CONTENT axis]
    3  → Situation   (Checkboxes: 4 options)           [SITUATION axis]
-   4  → Impact      (Checkboxes: 5 options)           [IMPACT axis]
-   5  → Attention   (Radio: 4 options)                [ATTENTION axis]
-   6  → Interests   (Open text — Rat Park Strategy)
-   7  → Results     (Radar Chart + Dynamic Report + CTA)
+   4  → Attention   (Radio: 4 options)                [ATTENTION axis]
+   5  → Impact      (Sliders: 6 options — positive)   [IMPACT axis]
+   6  → Interests   (Open text)
+   7  → Results     (Radar Chart + Report + CTA)
 ───────────────────────────────────────────────────────────────────────────── */
 
-const MAX_STEPS = 6 // displayed steps 1–6
+const MAX_STEPS = 6
 
 /* ── Step 1: Usage ───────────────────────────────────────────────────────── */
 const HOURS_OPTIONS = [
@@ -59,16 +59,7 @@ const SITUATION_OPTIONS = [
   { key: 'bed',     label: 'Before Bed'   },
 ]
 
-/* ── Step 4: Impact ──────────────────────────────────────────────────────── */
-const IMPACT_OPTIONS = [
-  { key: 'focus',         label: 'Eroded Focus'        },
-  { key: 'time',          label: 'Time Frustration'    },
-  { key: 'numbing',       label: 'Emotional Numbing'   },
-  { key: 'relationships', label: 'Relationship Strain' },
-  { key: 'fatigue',       label: 'Post-Scroll Fatigue' },
-]
-
-/* ── Step 5: Attention ───────────────────────────────────────────────────── */
+/* ── Step 4: Attention (moved up) ────────────────────────────────────────── */
 const ATTENTION_OPTIONS = [
   {
     key: 'flow', label: 'Flow State', score: 0,
@@ -88,121 +79,128 @@ const ATTENTION_OPTIONS = [
   },
 ]
 
+/* ── Step 5: Impact (positive framing, sliders) ─────────────────────────── */
+const IMPACT_OPTIONS = [
+  { key: 'focus',    label: 'Improve my ability to focus',                  subLabel: 'Struggling to concentrate or get things done'         },
+  { key: 'time',     label: 'Have more free time in my day',                subLabel: 'Losing hours to scrolling without meaning to'          },
+  { key: 'impulse',  label: 'Break the habit of reaching for my phone',     subLabel: 'Picking it up automatically without thinking'          },
+  { key: 'emotions', label: 'Feel more emotionally balanced',               subLabel: 'Mood swings, feeling flat or overstimulated'           },
+  { key: 'people',   label: 'Be more present with the people I care about', subLabel: 'Phone getting in the way of real-life connection'      },
+  { key: 'energy',   label: 'Feel less drained after using my phone',       subLabel: 'Finishing a scroll session feeling worse than before'   },
+]
+
 /* ─────────────────────────────────────────────────────────────────────────────
    SCORING
 ───────────────────────────────────────────────────────────────────────────── */
 function computeScores(answers) {
-  // USAGE: MAX(hours, zombie, pickups)
   const hScore = HOURS_OPTIONS.find(o => o.key === answers.hours)?.score ?? 0
   const zScore = ZOMBIE_OPTIONS.find(o => o.key === answers.zombie)?.score ?? 0
   const pScore = PICKUP_OPTIONS.find(o => o.key === answers.pickups)?.score ?? 0
   const usage  = Math.max(hScore, zScore, pScore)
 
-  // CONTENT: social% + notSure% (cap 100)
   const content = Math.min(100, (answers.content.social ?? 0) + (answers.content.notSure ?? 0))
 
-  // SITUATION: checkedCount × 25
   const situation = Math.min(100, answers.situation.length * 25)
 
-  // IMPACT: checkedCount × 20
-  const impact = Math.min(100, answers.impact.length * 20)
+  // IMPACT: highest slider value
+  const impact = Math.max(0, ...Object.values(answers.impact))
 
-  // ATTENTION: from radio selection
   const attention = ATTENTION_OPTIONS.find(o => o.key === answers.attention)?.score ?? 0
 
   return { usage, content, situation, impact, attention }
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   COACHING INSIGHT GENERATORS
+   INSIGHT MESSAGES — plain, accessible language
 ───────────────────────────────────────────────────────────────────────────── */
 function getUsageInsight(answers) {
   const hScore = HOURS_OPTIONS.find(o => o.key === answers.hours)?.score ?? 0
   const zScore = ZOMBIE_OPTIONS.find(o => o.key === answers.zombie)?.score ?? 0
   const pScore = PICKUP_OPTIONS.find(o => o.key === answers.pickups)?.score ?? 0
   const max = Math.max(hScore, zScore, pScore)
-  // Priority: hours → zombie → pickups
+
   if (max === hScore) {
-    return "Your raw exposure duration is the primary load on your attention architecture. At this volume, device use is not supplementing your life — it has become the primary activity structuring your waking hours."
+    return "You're spending a lot of time on your phone — at this level, it's become a significant part of your day rather than something you dip in and out of. The plan focuses on reducing total time first, because everything else gets easier once that comes down."
   }
   if (max === zScore) {
-    return "The majority of your screen time is classified as unintentional. You are not directing your device — the device is summoning you. This is the structural definition of a conditioned behavior loop, not a choice."
+    return "A big portion of your phone time is happening on autopilot — you're picking it up without really deciding to. That's not a willpower problem, it's a habit that's become automatic. The plan is designed specifically to interrupt those unconscious loops."
   }
-  return "Your pickup frequency is the dominant risk signal. Each unlock event disrupts your cognitive state and initiates a full attention reset — a cost that compounds across hundreds of daily interruptions."
+  return "How often you reach for your phone is the biggest concern here. Picking it up dozens of times a day breaks your train of thought each time, even if only briefly — and those interruptions add up to a lot of lost focus across the day."
 }
 
 function getContentInsight(content) {
   if (content.social > 50) {
-    return "Social content constitutes the majority of your consumption profile. Algorithmic feeds operate on variable-ratio reinforcement — the most powerful conditioning schedule in behavioral psychology. Your dopamine baseline has been recalibrated to engineered novelty."
+    return "Social media makes up most of your phone time. These apps are built to keep you coming back — unpredictable likes, comments, and new posts create a loop that's genuinely hard to step away from. It's not a lack of discipline; it's the design."
   }
   if (content.notSure > 25) {
-    return "A significant portion of your usage cannot be categorized. Unconscious consumption is operationally more dangerous than deliberate use — you cannot interrupt a pattern you have not yet identified. Awareness is the first required intervention."
+    return "A lot of your phone time is unaccounted for, which usually means it's happening on autopilot. Usage you can't easily explain is often the hardest to change, because you haven't quite noticed the pattern yet — awareness is the first step."
   }
   if (content.comm > 40) {
-    return "Communication apps are your primary content vector. The social contract of instant availability creates a state of chronic low-grade vigilance that is neurologically equivalent to a sustained, low-intensity threat response."
+    return "Messaging apps are where a lot of your time goes. The feeling that you need to always be available keeps you checking in more than you probably need to — and that low-level alertness is tiring even when you're not actively using your phone."
   }
   if (content.utility > 50) {
-    return "High utility usage often masks compulsive checking behavior. Legitimate functional needs rarely require this volume of device interaction. The device has likely colonized the utility frame to justify non-functional use."
+    return "Most of your usage falls under practical tasks, but high volumes of 'useful' phone time can still become habitual. It's worth asking whether every check is genuinely necessary — sometimes utility is a cover for something more automatic."
   }
-  return "Your content profile is distributed across multiple categories with no single dominant vector. Your risk is driven by aggregate volume rather than a specific content dependency — a pattern that requires scheduling intervention rather than app removal."
+  return "Your phone time is fairly spread across different types of use. There's no single obvious culprit, which means the focus should be on overall volume and building in more phone-free time rather than targeting one specific app."
 }
 
 function getSituationInsight(situation) {
   const score = situation.length * 25
   if (score >= 75) {
-    return "Your device has colonized nearly every temporal context of your day. There are no protected cognitive windows remaining. Recovery requires deliberate architectural changes to your daily schedule before any behavioral intervention can hold."
+    return "Your phone is present in almost every part of your day — there aren't many gaps where it isn't in the picture. Building in a few proper phone-free periods will make a real difference, and those gaps will start to feel normal quite quickly."
   }
   if (situation.includes('morning')) {
-    return "Morning phone use is the highest-leverage intervention point on this profile. The first cortisol wave of the day sets your neurological operating state. Initiating with a stimulus-rich screen establishes fragmentation as your cognitive baseline before the day has begun."
+    return "Starting the day on your phone sets the tone for everything that follows. It's one of the most impactful habits to change — even just pushing back that first check by 30 minutes can shift how the whole day feels."
   }
   if (situation.includes('bed')) {
-    return "Pre-sleep device use is measurably degrading your sleep architecture. Blue light suppresses melatonin synthesis, and social stimulation activates the default mode network precisely when it needs to be deactivating. This compounds every other cognitive deficit on this report."
+    return "Using your phone before sleep makes it genuinely harder to wind down and affects how rested you feel the next day. It's one of the clearest links between phone habits and how you feel — and one of the most straightforward things to change."
   }
   if (situation.includes('work')) {
-    return "Device interruptions during productive hours produce an average 23-minute recovery cost per episode. At your reported frequency, this is not distraction — it is the structural elimination of deep work capacity."
+    return "Phone use during work hours is costly — not just for the time it takes, but because switching back to what you were doing takes longer than most people realise. Cutting this down tends to have a big impact on how productive and less stressed you feel."
   }
-  return "Evening usage is the most common entry point for compulsive loops. Reduced cognitive control in the evening hours combined with lower-stakes time perception creates optimal conditions for extended unintentional sessions."
+  return "Evening scrolling is one of the most common ways phone time creeps up without you noticing. It's easy to lose an hour or two, and it often pushes back sleep without feeling like it."
 }
 
 function getImpactInsight(impact) {
-  const score = impact.length * 20
-  if (score >= 80) {
-    return "Device use is producing cascading damage across multiple life domains simultaneously. When the impact profile extends this broadly, the device is no longer a tool being misused — it has become the organizing principle of dysfunction."
+  // impact is now { focus: 0-100, time: 0-100, ... }
+  const entries = Object.entries(impact).filter(([, v]) => v > 0)
+  if (!entries.length) {
+    return "Move the sliders to show what you'd most like to improve — that'll help us tailor your plan."
   }
-  if (impact.includes('numbing')) {
-    return "Emotional numbing is the most diagnostically significant item on this profile. Using the device as an affect-regulation mechanism prevents natural emotional processing and creates a feedback loop where authentic experience becomes intolerable by comparison."
+  const [topKey] = entries.sort((a, b) => b[1] - a[1])[0]
+  const msgs = {
+    focus:    "Improving your focus is your top priority — and it's one of the areas that responds fastest to reduced phone use. Most people notice a real difference within the first two weeks.",
+    time:     "Getting more free time back is one of the most motivating things about this process. Even small daily reductions add up to a surprising amount of time over four weeks.",
+    impulse:  "Breaking the automatic habit of reaching for your phone is one of the most powerful things you can work on — because once that reflex changes, everything else tends to follow.",
+    emotions: "Feeling more emotionally balanced is something many people notice quite quickly when they cut back. The restlessness and mood swings tend to settle as your brain adjusts to less stimulation.",
+    people:   "Being more present with the people around you is one of the most meaningful things you can get back — and people around you will notice the difference too.",
+    energy:   "Feeling less drained after phone use is very real and very fixable. That post-scroll tiredness tends to improve quite quickly once you start pulling back.",
   }
-  if (impact.includes('fatigue')) {
-    return "Post-scroll fatigue indicates your reward circuitry is running at a deficit. You are completing consumption sessions more depleted than when you began — a reliable marker of dopaminergic depletion, not fulfillment."
-  }
-  if (impact.includes('relationships')) {
-    return "Reported relationship strain is the leading behavioral indicator that usage has crossed into measurable life damage. Social bonds require presence; consistent device use signals to the people around you — and to your own nervous system — that the device is the priority relationship."
-  }
-  return "The impacts you have identified represent direct cognitive and behavioral costs of your current usage pattern. Each area flagged is a concrete levy on your time and attentional capacity."
+  return msgs[topKey] ?? "You've identified some clear goals — the plan ahead is built around helping you get them back."
 }
 
 function getAttentionInsight(attention) {
   if (attention === 'reset') {
-    return "Critically fragmented. Your attention architecture has adapted to constant interruption as its baseline state. Sustained focus now produces discomfort — a neurological withdrawal response. Restoration requires deliberate, progressive re-exposure to uninterrupted cognitive work."
+    return "You're finding it very hard to stay on task — most attempts at focused work get interrupted before you can really get going. This is genuinely common with heavy phone use, and it does get better. Most people notice an improvement within the first two weeks of cutting back."
   }
   if (attention === 'fragmentation') {
-    return "Continuous partial attention. You are operating in a state of permanent semi-engagement — simultaneously present everywhere and nowhere. This is neurologically more costly than full focus or full rest, and is the chronic operating mode of cognitive depletion."
+    return "You're getting some work done but spending a lot of time drifting between your task and your phone. That divided attention is tiring and means you rarely do either thing fully — and it tends to leave you feeling like the day wasn't productive even when you were busy."
   }
   if (attention === 'itch') {
-    return "The Itch phase. You retain structural capacity for focus but experience compulsive pull-away urges. The attentional architecture is intact; the conditioning is not. This is the most recoverable position on the attention spectrum — the intervention window is open."
+    return "You feel the pull to check your phone but can mostly resist it. Your focus is still fairly intact — the habit is there, but it hasn't taken over completely. That's a good position to work from."
   }
   if (attention === 'flow') {
-    return "Resilient focus. Your attentional capacity is largely preserved. Your risk profile is concentrated in other domains on this assessment. Protecting this capacity should be treated as a priority asset — it is the first thing lost and the last thing recovered."
+    return "Your focus is largely holding up, which is a good position to be in. The aim of the plan is to protect and extend that, and make sure it doesn't gradually erode the way it does for most people over time."
   }
-  return "Attention state unrecorded."
+  return "Attention state not recorded."
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
    CONTENT SLIDER ADJUSTMENT (always sums to 100)
 ───────────────────────────────────────────────────────────────────────────── */
 function adjustContentSliders(prev, key, rawVal) {
-  const clamped = Math.max(0, Math.min(100, Math.round(rawVal)))
-  const others  = CONTENT_KEYS.filter(k => k !== key)
+  const clamped   = Math.max(0, Math.min(100, Math.round(rawVal)))
+  const others    = CONTENT_KEYS.filter(k => k !== key)
   const remaining = 100 - clamped
 
   if (remaining <= 0) {
@@ -254,8 +252,8 @@ function initAnswers() {
     pickups:   null,
     content:   { social: 25, notSure: 25, comm: 25, utility: 25 },
     situation: [],
-    impact:    [],
     attention: null,
+    impact:    { focus: 0, time: 0, impulse: 0, emotions: 0, people: 0, energy: 0 },
     interests: '',
   }
 }
@@ -279,13 +277,11 @@ export default function QuizModal({ isOpen, onClose }) {
   const [saving,     setSaving]     = useState(false)
   const [refNum]                    = useState(generateRef)
 
-  /* body scroll lock */
   useEffect(() => {
     document.body.style.overflow = isOpen ? 'hidden' : ''
     return () => { document.body.style.overflow = '' }
   }, [isOpen])
 
-  /* reset on close */
   useEffect(() => {
     if (!isOpen) {
       setStep(0); setDir(1); setAnswers(initAnswers())
@@ -300,7 +296,6 @@ export default function QuizModal({ isOpen, onClose }) {
   const progress  = isIntro ? 0 : isResults ? 100 : (step / MAX_STEPS) * 100
   const scores    = computeScores(answers)
 
-  /* ── State helpers ─────────────────────────────────────────────────────── */
   function set(key, val) {
     setAnswers(prev => ({ ...prev, [key]: val }))
   }
@@ -316,20 +311,26 @@ export default function QuizModal({ isOpen, onClose }) {
     }))
   }
 
+  function setImpact(key, val) {
+    setAnswers(prev => ({
+      ...prev,
+      impact: { ...prev.impact, [key]: Number(val) },
+    }))
+  }
+
   /* ── Validation ────────────────────────────────────────────────────────── */
   function canAdvance() {
     switch (step) {
       case 1: return !!(answers.hours && answers.zombie && answers.pickups)
-      case 2: return true // sliders always sum to 100
+      case 2: return true
       case 3: return answers.situation.length >= 1
-      case 4: return answers.impact.length >= 1
-      case 5: return !!answers.attention
+      case 4: return !!answers.attention
+      case 5: return Object.values(answers.impact).some(v => v > 0)
       case 6: return answers.interests.trim().length > 0
       default: return false
     }
   }
 
-  /* ── Navigation ────────────────────────────────────────────────────────── */
   function advance() {
     if (!canAdvance()) return
     setDir(1)
@@ -362,15 +363,14 @@ export default function QuizModal({ isOpen, onClose }) {
         pickups:   answers.pickups,
         content:   answers.content,
         situation: answers.situation,
-        impact:    answers.impact,
         attention: answers.attention,
+        impact:    answers.impact,
         interests: answers.interests,
         refNum,
       },
       newsletter_subscribed: newsletter,
     })
     if (error) console.error('quiz_submissions error:', error)
-
     setSaving(false)
     setEmailSent(true)
   }
@@ -400,8 +400,8 @@ export default function QuizModal({ isOpen, onClose }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8"
          role="dialog" aria-modal="true" aria-label="Digital Health Assessment">
 
-      <div className="absolute inset-0 bg-[#1A1A1A]/75 backdrop-blur-sm"
-           onClick={onClose} aria-hidden="true" />
+      {/* Backdrop — no click-to-close */}
+      <div className="absolute inset-0 bg-[#1A1A1A]/75 backdrop-blur-sm" aria-hidden="true" />
 
       <div className={[
         'relative bg-[#F2F0ED] w-full shadow-2xl flex flex-col overflow-hidden',
@@ -564,42 +564,11 @@ export default function QuizModal({ isOpen, onClose }) {
                 </div>
               )}
 
-              {/* ══════════════════════  STEP 4: IMPACT  ═════════════════════ */}
+              {/* ══════════════════════  STEP 4: ATTENTION  ══════════════════ */}
               {step === 4 && (
                 <div className="px-10 py-10 space-y-6">
                   <StepHeader step={4} total={MAX_STEPS} />
-                  <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Section 4: Impact</p>
-                  <div className="space-y-1">
-                    <h2 className="font-display font-bold text-2xl text-neutral-900 leading-snug tracking-tight">
-                      What impact are you noticing?
-                    </h2>
-                    <p className="text-sm text-neutral-400 font-light">Select all that apply.</p>
-                  </div>
-                  <ul className="space-y-2">
-                    {IMPACT_OPTIONS.map(opt => {
-                      const active = answers.impact.includes(opt.key)
-                      return (
-                        <li key={opt.key}>
-                          <button onClick={() => set('impact', toggleCheck(answers.impact, opt.key))}
-                            className={optionClass(active)}>
-                            <span className="flex items-center gap-3">
-                              <CheckBox active={active} />
-                              {opt.label}
-                            </span>
-                          </button>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                  <NavRow onBack={retreat} onNext={advance} canNext={canAdvance()} />
-                </div>
-              )}
-
-              {/* ══════════════════════  STEP 5: ATTENTION  ══════════════════ */}
-              {step === 5 && (
-                <div className="px-10 py-10 space-y-6">
-                  <StepHeader step={5} total={MAX_STEPS} />
-                  <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Section 5: Attention</p>
+                  <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Section 4: Attention</p>
                   <h2 className="font-display font-bold text-2xl text-neutral-900 leading-snug tracking-tight">
                     When working on a project for an hour, which best describes your experience?
                   </h2>
@@ -627,18 +596,57 @@ export default function QuizModal({ isOpen, onClose }) {
                 </div>
               )}
 
+              {/* ══════════════════════  STEP 5: IMPACT  ════════════════════ */}
+              {step === 5 && (
+                <div className="px-10 py-10 space-y-6">
+                  <StepHeader step={5} total={MAX_STEPS} />
+                  <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Section 5: What You Want to Improve</p>
+                  <div className="space-y-1">
+                    <h2 className="font-display font-bold text-2xl text-neutral-900 leading-snug tracking-tight">
+                      Which of these would you most like to improve?
+                    </h2>
+                    <p className="text-sm text-neutral-400 font-light">
+                      Slide each one to show how important it is to you — 0 means it's not a concern, 100 means it's a top priority.
+                    </p>
+                  </div>
+                  <div className="space-y-6">
+                    {IMPACT_OPTIONS.map(opt => {
+                      const val = answers.impact[opt.key] ?? 0
+                      return (
+                        <div key={opt.key} className="space-y-1.5">
+                          <div className="flex justify-between items-baseline">
+                            <label className="text-sm font-semibold text-neutral-800">{opt.label}</label>
+                            <span className="text-xs font-mono text-neutral-400 ml-2 flex-shrink-0">{val}</span>
+                          </div>
+                          <p className="text-xs text-neutral-400 font-light">{opt.subLabel}</p>
+                          <input
+                            type="range" min={0} max={100} value={val}
+                            onChange={e => setImpact(opt.key, e.target.value)}
+                            className="w-full h-1.5 appearance-none cursor-pointer rounded-full"
+                            style={{
+                              background: `linear-gradient(to right, #5c8260 ${val}%, #e5e7eb ${val}%)`,
+                            }}
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <NavRow onBack={retreat} onNext={advance} canNext={canAdvance()} />
+                </div>
+              )}
+
               {/* ══════════════════════  STEP 6: INTERESTS  ══════════════════ */}
               {step === 6 && (
                 <div className="px-10 py-10 space-y-6">
                   <StepHeader step={6} total={MAX_STEPS} />
-                  <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Section 6: Interests</p>
+                  <p className="text-xs tracking-widest uppercase text-emerald-600 font-bold">Section 6: Your Time</p>
                   <div className="space-y-2">
                     <h2 className="font-display font-bold text-2xl text-neutral-900 leading-snug tracking-tight">
-                      If you had an extra hour of calm, what is one hobby or skill you'd enjoy?
+                      If you had an extra hour of calm each day, what would you do with it?
                     </h2>
                     <p className="text-xs text-neutral-400 font-light leading-relaxed">
-                      The 'Rat Park' Strategy — behavioral substitution, not willpower, is the mechanism of
-                      recovery. Think of what you enjoyed before the smartphone colonised your time.
+                      Think about a hobby, skill, or activity you've been meaning to get back to — or something
+                      you've always wanted to try. Even a vague answer is useful here.
                     </p>
                   </div>
                   <textarea
@@ -703,14 +711,12 @@ function ResultsScreen({
   ]
 
   const report = [
-    { label: 'Usage',     score: scores.usage,     text: getUsageInsight(answers)              },
-    { label: 'Content',   score: scores.content,   text: getContentInsight(answers.content)    },
+    { label: 'Usage',     score: scores.usage,     text: getUsageInsight(answers)               },
+    { label: 'Content',   score: scores.content,   text: getContentInsight(answers.content)     },
     { label: 'Situation', score: scores.situation,  text: getSituationInsight(answers.situation) },
-    { label: 'Impact',    score: scores.impact,    text: getImpactInsight(answers.impact)      },
     { label: 'Attention', score: scores.attention, text: getAttentionInsight(answers.attention) },
+    { label: 'Impact',    score: scores.impact,    text: getImpactInsight(answers.impact)       },
   ]
-
-  const sectionOffset = answers.interests ? 1 : 0
 
   return (
     <div className="divide-y divide-neutral-200">
@@ -720,7 +726,7 @@ function ResultsScreen({
         <div>
           <p className="text-xs tracking-widest uppercase text-neutral-400 font-light mb-1.5">Mind Sovereignty</p>
           <h2 className="font-display font-black text-2xl text-neutral-900 tracking-tight">
-            Digital Health Assessment
+            Your Results
           </h2>
         </div>
         <div className="text-right flex-shrink-0">
@@ -729,23 +735,23 @@ function ResultsScreen({
         </div>
       </div>
 
-      {/* 5-Axis Radar Chart */}
+      {/* Radar Chart — diagram only, no score pills */}
       <div className="px-10 py-8 space-y-4">
         <div className="flex items-baseline gap-3">
           <span className="text-xs font-mono text-neutral-300">01</span>
           <div>
-            <p className="text-xs tracking-widest uppercase text-neutral-400 font-light">Risk Profile</p>
-            <p className="text-xs text-neutral-300 font-light mt-0.5">Outer perimeter = higher risk exposure (0–100)</p>
+            <p className="text-xs tracking-widest uppercase text-neutral-400 font-light">Your Profile</p>
+            <p className="text-xs text-neutral-300 font-light mt-0.5">Further out = higher concern (0–100)</p>
           </div>
         </div>
         <AssessmentRadar data={radarData} />
       </div>
 
-      {/* Clinical Assessment Report */}
+      {/* What your results mean */}
       <div className="px-10 py-8 space-y-6">
         <div className="flex items-baseline gap-3">
           <span className="text-xs font-mono text-neutral-300">02</span>
-          <p className="text-xs tracking-widest uppercase text-neutral-400 font-light">Clinical Assessment</p>
+          <p className="text-xs tracking-widest uppercase text-neutral-400 font-light">What This Means</p>
         </div>
 
         {report.map(({ label, score, text }) => (
@@ -754,7 +760,7 @@ function ResultsScreen({
               <p className="text-xs font-bold tracking-widest uppercase text-neutral-500">{label}</p>
               <span className={[
                 'text-xs font-mono font-bold px-2 py-0.5',
-                score >= 75 ? 'bg-red-900/10 text-red-700'     :
+                score >= 75 ? 'bg-red-900/10 text-red-700'    :
                 score >= 50 ? 'bg-amber-900/10 text-amber-700' :
                               'bg-neutral-100 text-neutral-500',
               ].join(' ')}>{score}/100</span>
@@ -764,19 +770,18 @@ function ResultsScreen({
         ))}
       </div>
 
-      {/* Rat Park Protocol (interests) */}
+      {/* What you want to get back */}
       {answers.interests && (
         <div className="px-10 py-7 space-y-3">
           <div className="flex items-baseline gap-3">
             <span className="text-xs font-mono text-neutral-300">03</span>
-            <p className="text-xs tracking-widest uppercase text-neutral-400 font-light">Rat Park Protocol</p>
+            <p className="text-xs tracking-widest uppercase text-neutral-400 font-light">Your Goal</p>
           </div>
           <div className="bg-white border border-neutral-200 px-5 py-4">
             <p className="text-xs text-neutral-400 font-light leading-relaxed">
-              Your identified replacement activity —{' '}
-              <span className="text-neutral-700 font-medium italic">"{answers.interests}"</span>
-              {' '}— is the behavioral anchor of your recovery plan. Willpower is not the mechanism.
-              Environmental redesign and substitution are. This is what fills the space.
+              You want to spend more time on{' '}
+              <span className="text-neutral-700 font-medium italic">"{answers.interests}"</span>.
+              {' '}That's what the time you get back goes towards — and having something specific makes the plan much more likely to work.
             </p>
           </div>
         </div>
@@ -785,9 +790,9 @@ function ResultsScreen({
       {/* CTA / Email Capture */}
       <div className="px-10 py-7 space-y-4">
         <div className="flex items-baseline gap-3">
-          <span className="text-xs font-mono text-neutral-300">0{3 + sectionOffset}</span>
+          <span className="text-xs font-mono text-neutral-300">0{answers.interests ? '4' : '3'}</span>
           <div>
-            <p className="text-xs tracking-widest uppercase text-neutral-400 font-light">Initiate Your Protocol</p>
+            <p className="text-xs tracking-widest uppercase text-neutral-400 font-light">Get Your 4-Week Plan</p>
             <p className="text-xs text-neutral-300 font-light mt-0.5">Free · Delivered to your inbox · No spam</p>
           </div>
         </div>
@@ -808,7 +813,7 @@ function ResultsScreen({
                   'uppercase px-6 py-3.5 hover:bg-black transition-colors',
                   saving ? 'opacity-50 cursor-not-allowed' : '',
                 ].join(' ')}>
-                {saving ? 'Saving…' : 'Initiate My 4-Week Protocol'}
+                {saving ? 'Saving…' : 'Send My Plan'}
               </button>
             </div>
             <label className="flex items-center gap-3 cursor-pointer group">
@@ -827,16 +832,16 @@ function ResultsScreen({
                 )}
               </span>
               <span className="text-xs text-neutral-400 font-light" onClick={() => setNewsletter(n => !n)}>
-                Subscribe to science-backed research on attention, habit, and focus.
+                Subscribe to research updates on attention, habit, and focus.
               </span>
             </label>
           </form>
         ) : (
           <div className="bg-[#1A1A1A] px-6 py-5 space-y-1">
-            <p className="text-base font-display font-bold text-white">Protocol Initiated.</p>
+            <p className="text-base font-display font-bold text-white">Your plan is on its way.</p>
             <p className="text-xs text-white/55 font-light leading-relaxed">
-              Your personalised 4-week recovery plan is heading to your inbox. Phase 1 starts the moment
-              you close this window.
+              Check your inbox for your personalised 4-week recovery plan. It includes a full breakdown of your
+              results and a practical week-by-week guide to get started.
             </p>
           </div>
         )}
@@ -868,20 +873,16 @@ function ContentSliders({ content, onChange }) {
 
   return (
     <div className="space-y-6">
-      {/* Donut chart */}
       <div className="flex items-center justify-center">
         <div className="relative" style={{ width: 180, height: 180 }}>
           <ResponsiveContainer width={180} height={180}>
             <PieChart>
               <Pie
                 data={pieData}
-                cx="50%"
-                cy="50%"
-                innerRadius={52}
-                outerRadius={84}
+                cx="50%" cy="50%"
+                innerRadius={52} outerRadius={84}
                 dataKey="value"
-                startAngle={90}
-                endAngle={-270}
+                startAngle={90} endAngle={-270}
                 strokeWidth={0}
               >
                 {pieData.map((entry, i) => (
@@ -890,7 +891,6 @@ function ContentSliders({ content, onChange }) {
               </Pie>
             </PieChart>
           </ResponsiveContainer>
-          {/* Centre label */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="text-center">
               <p className="text-lg font-bold font-mono text-neutral-800">100</p>
@@ -900,7 +900,6 @@ function ContentSliders({ content, onChange }) {
         </div>
       </div>
 
-      {/* Sliders */}
       <div className="space-y-4">
         {CONTENT_KEYS.map(key => {
           const { label, chartColor, textColor } = CONTENT_META[key]
@@ -908,16 +907,11 @@ function ContentSliders({ content, onChange }) {
           return (
             <div key={key} className="space-y-1.5">
               <div className="flex justify-between items-center">
-                <label className="text-sm font-medium" style={{ color: textColor }}>
-                  {label}
-                </label>
+                <label className="text-sm font-medium" style={{ color: textColor }}>{label}</label>
                 <span className="text-sm font-mono text-neutral-500">{val}%</span>
               </div>
               <input
-                type="range"
-                min={0}
-                max={100}
-                value={val}
+                type="range" min={0} max={100} value={val}
                 onChange={e => onChange(key, Number(e.target.value))}
                 className="w-full h-1.5 appearance-none cursor-pointer rounded-full"
                 style={{
@@ -933,78 +927,42 @@ function ContentSliders({ content, onChange }) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   ASSESSMENT RADAR — 5-axis risk chart
+   ASSESSMENT RADAR — diagram only, no score pills
 ───────────────────────────────────────────────────────────────────────────── */
 function AssessmentRadar({ data }) {
   return (
-    <div className="space-y-4">
-      <ResponsiveContainer width="100%" height={280}>
-        <RadarChart
-          cx="50%"
-          cy="50%"
-          outerRadius="72%"
-          data={data}
-          startAngle={90}
-          endAngle={90 - 360}
-        >
-          <PolarGrid gridType="polygon" stroke="rgba(44,44,44,0.08)" />
-          <PolarAngleAxis
-            dataKey="subject"
-            tick={<RadarAxisTick />}
-            axisLine={false}
-            tickLine={false}
-          />
-          <PolarRadiusAxis
-            domain={[0, 100]}
-            tickCount={5}
-            tick={false}
-            axisLine={false}
-          />
-          <Radar
-            dataKey="value"
-            stroke="#c0614e"
-            fill="#c0614e"
-            fillOpacity={0.15}
-            strokeWidth={1.5}
-            dot={{ r: 3, fill: '#c0614e', strokeWidth: 0 }}
-          />
-          <Tooltip content={<RadarTooltip />} />
-        </RadarChart>
-      </ResponsiveContainer>
-
-      {/* Score pills */}
-      <div className="grid grid-cols-5 gap-1.5 text-center">
-        {data.map(({ subject, value }) => (
-          <div key={subject} className="space-y-0.5">
-            <div className={[
-              'text-base font-display font-bold',
-              value >= 75 ? 'text-red-700'    :
-              value >= 50 ? 'text-amber-600'  :
-                            'text-neutral-500',
-            ].join(' ')}>{value}</div>
-            <div className="text-[10px] text-neutral-400 font-sans font-light leading-tight">
-              {subject}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+    <ResponsiveContainer width="100%" height={280}>
+      <RadarChart
+        cx="50%" cy="50%" outerRadius="72%"
+        data={data}
+        startAngle={90} endAngle={90 - 360}
+      >
+        <PolarGrid gridType="polygon" stroke="rgba(44,44,44,0.08)" />
+        <PolarAngleAxis
+          dataKey="subject"
+          tick={<RadarAxisTick />}
+          axisLine={false}
+          tickLine={false}
+        />
+        <PolarRadiusAxis domain={[0, 100]} tickCount={5} tick={false} axisLine={false} />
+        <Radar
+          dataKey="value"
+          stroke="#c0614e"
+          fill="#c0614e"
+          fillOpacity={0.15}
+          strokeWidth={1.5}
+          dot={{ r: 3, fill: '#c0614e', strokeWidth: 0 }}
+        />
+        <Tooltip content={<RadarTooltip />} />
+      </RadarChart>
+    </ResponsiveContainer>
   )
 }
 
 function RadarAxisTick({ x, y, payload }) {
   return (
-    <text
-      x={x} y={y}
-      textAnchor="middle"
-      dominantBaseline="central"
-      style={{
-        fontSize: '11px',
-        fontFamily: 'Inter, system-ui, sans-serif',
-        fill: 'rgba(44,44,44,0.50)',
-        fontWeight: 400,
-      }}
-    >
+    <text x={x} y={y} textAnchor="middle" dominantBaseline="central"
+      style={{ fontSize: '11px', fontFamily: 'Inter, system-ui, sans-serif', fill: 'rgba(44,44,44,0.50)', fontWeight: 400 }}>
       {payload.value}
     </text>
   )

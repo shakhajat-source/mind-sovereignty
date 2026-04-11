@@ -399,44 +399,66 @@ async function buildPDF(
 /* ═══════════════════════════════════════════════════════════════════════════
    HTML EMAIL
 ═══════════════════════════════════════════════════════════════════════════ */
-function leakageBars(scores: Record<string, number>): string {
-  const entries = Object.entries(scores).filter(([k]) => k in LEAKAGE_LABELS)
-  if (!entries.length) return '<tr><td style="font-size:12px;color:#aaa;font-family:Inter,sans-serif;">No data.</td></tr>'
-  const colours: Record<string, string> = { stimulation: '#c17240', vigilance: '#5c7a8c', avoidance: '#8c6b5c' }
-  return entries.map(([key, rawVal]) => {
-    const val = Math.min(100, Math.max(0, Number(rawVal) || 0))
+
+const RADAR_AXES: { key: string; label: string; colour: string }[] = [
+  { key: 'usage',     label: 'Daily Usage',        colour: '#5c8260' },
+  { key: 'content',   label: 'Content Mix',         colour: '#7a6b5c' },
+  { key: 'situation', label: 'Trigger Situations',  colour: '#5c6b7a' },
+  { key: 'attention', label: 'Attention Span',      colour: '#7a5c70' },
+  { key: 'impact',    label: 'Life Impact',         colour: '#c17240' },
+]
+
+function radarBars(scores: Record<string, number>): string {
+  const rows = RADAR_AXES.map(({ key, label, colour }) => {
+    const val  = Math.min(100, Math.max(0, Number(scores[key]) || 0))
     const barW = Math.round(val * 1.8)
     return `<tr>
-      <td style="padding:5px 0;width:130px;font-size:12px;color:#888;font-family:Inter,sans-serif;vertical-align:middle;">${LEAKAGE_LABELS[key]}</td>
-      <td style="padding:5px 10px;vertical-align:middle;">
+      <td style="padding:6px 0;width:140px;font-size:12px;color:#666;font-family:Inter,sans-serif;vertical-align:middle;">${label}</td>
+      <td style="padding:6px 10px;vertical-align:middle;">
         <div style="background:#eeece9;border-radius:2px;height:6px;width:180px;">
-          <div style="background:${colours[key] ?? '#888'};height:6px;width:${barW}px;border-radius:2px;"></div>
+          <div style="background:${colour};height:6px;width:${barW}px;border-radius:2px;"></div>
         </div>
       </td>
-      <td style="padding:5px 0;font-size:12px;font-family:'Courier New',monospace;color:#2c2c2c;width:32px;vertical-align:middle;">${val}</td>
+      <td style="padding:6px 0;font-size:12px;font-family:'Courier New',monospace;color:#2c2c2c;width:32px;vertical-align:middle;">${val}</td>
     </tr>`
-  }).join('')
+  })
+  return rows.join('')
 }
 
 function buildEmail(
   _toEmail:    string,
-  profileType: string,
+  _profileType: string,
   scores:      Record<string, number>,
-  auditData:   Record<string, string>,
+  auditData:   Record<string, unknown>,
 ): string {
-  const archetypeName = ARCHETYPE_NAME[profileType] ?? 'Sovereignty Seeker'
-  const severity      = auditData?.severity  ?? ''
-  const interests     = auditData?.interests ?? ''
-  const usageHours    = HOURS_LABEL[auditData?.usageHours ?? ''] ?? ''
-  const year          = new Date().getFullYear()
+  const interests  = typeof auditData?.interests === 'string' ? auditData.interests : ''
+  const hoursKey   = typeof auditData?.hours === 'string' ? auditData.hours : ''
+  const usageHours = HOURS_LABEL[hoursKey] ?? ''
+  const year       = new Date().getFullYear()
 
-  const severityLine  = severity  ? `You've identified a <strong>${Q5_LABEL[severity] ?? severity}</strong> level of phone dependency. ` : ''
-  const interestsLine = interests ? `You've told us you'd like to spend your extra time on: <em>${interests}</em>. ` : ''
   const hoursLine     = usageHours ? `Your reported daily screen time is <strong>${usageHours}</strong>. ` : ''
+  const interestsLine = interests  ? `You want to use your recovered time on: <em>${interests}</em>. ` : ''
+
+  // Identify the highest-scoring axis for a plain-language headline
+  const topAxis = RADAR_AXES.reduce((best, ax) =>
+    (scores[ax.key] ?? 0) > (scores[best.key] ?? 0) ? ax : best, RADAR_AXES[0])
+  const topScore = scores[topAxis.key] ?? 0
+
+  const topInsight: Record<string, string> = {
+    usage:     'Your screen time is one of the main patterns to address — the sheer hours add up fast and crowd out the things that matter more.',
+    content:   'The type of content you consume is working against you. High-stimulation feeds keep pulling you back even when you don\'t want them to.',
+    situation: 'Specific situations are triggering most of your phone use. Identifying and adding friction in those moments will have an outsized effect.',
+    attention: 'Your ability to focus is taking a significant hit. Rebuilding it is the first thing that improves once screen time comes down.',
+    impact:    'You feel the effects of phone use across your daily life — your energy, mood, and focus. That is a strong signal that now is the right time to act.',
+  }
+
+  const whatThisMeans = topScore > 0
+    ? (topInsight[topAxis.key] ?? 'Your results show a clear pattern worth addressing over the next four weeks.')
+    : 'Your results give you a clear starting point for the next four weeks.'
 
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Your Sovereignty Assessment &amp; 4-Week Roadmap</title></head>
+<title>Your Recovery Plan — Mind Sovereignty</title></head>
 <body style="margin:0;padding:0;background:#f2f0ed;font-family:Inter,system-ui,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f2f0ed;padding:40px 20px;">
 <tr><td align="center">
@@ -445,74 +467,92 @@ function buildEmail(
   <!-- Header -->
   <tr><td style="padding:40px 48px 28px;border-bottom:1px solid #eeece9;">
     <p style="margin:0 0 4px;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">Mind Sovereignty</p>
-    <h1 style="margin:0;font-size:26px;font-weight:900;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;line-height:1.15;">Your Sovereignty Assessment &amp; 4-Week Roadmap</h1>
-    <p style="margin:6px 0 0;font-size:13px;color:#5c8260;font-family:Inter,sans-serif;font-weight:500;">${archetypeName}</p>
+    <h1 style="margin:0;font-size:26px;font-weight:900;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;line-height:1.15;">Your Recovery Plan</h1>
+    <p style="margin:8px 0 0;font-size:13px;color:#555;font-family:Inter,sans-serif;line-height:1.6;">${hoursLine}${interestsLine}Here is everything you need to get started.</p>
   </td></tr>
 
-  <!-- Summary -->
+  <!-- Radar Scores -->
   <tr><td style="padding:32px 48px;border-bottom:1px solid #eeece9;">
-    <p style="margin:0 0 12px;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">Your Snapshot</p>
-    <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">
-      ${hoursLine}${severityLine}${interestsLine}Your personalised roadmap and full written assessment are attached as a PDF.
-    </p>
+    <p style="margin:0 0 16px;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">Your Results</p>
+    <table cellpadding="0" cellspacing="0">${radarBars(scores)}</table>
+    <p style="margin:14px 0 0;font-size:11px;color:#bbb;font-family:Inter,sans-serif;">Each axis scored 0–100. Higher means more pressure in that area.</p>
   </td></tr>
 
-  <!-- Cognitive Leakage -->
+  <!-- What This Means -->
   <tr><td style="padding:32px 48px;border-bottom:1px solid #eeece9;">
-    <p style="margin:0 0 16px;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">Cognitive Leakage</p>
-    <table cellpadding="0" cellspacing="0">${leakageBars(scores)}</table>
-    <p style="margin:14px 0 0;font-size:11px;color:#bbb;font-family:Inter,sans-serif;">Where your mental energy is being spent. Each score is out of 100.</p>
+    <p style="margin:0 0 12px;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">What This Means</p>
+    <p style="margin:0 0 12px;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">${whatThisMeans}</p>
+    <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">None of this is a personal failing. These patterns are the result of systems engineered to hold your attention. The four weeks ahead are about taking that attention back — one habit at a time.</p>
   </td></tr>
 
-  <!-- Pre-plan prep -->
+  ${interests ? `<!-- Your Goal -->
+  <tr><td style="padding:32px 48px;border-bottom:1px solid #eeece9;">
+    <p style="margin:0 0 12px;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">Your Goal</p>
+    <p style="margin:0 0 10px;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">You told us you want to use your recovered time on: <strong style="color:#2c2c2c;">${interests}</strong>.</p>
+    <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">Keep that front of mind. Every hour you reclaim from the scroll is an hour you can put towards this. Having a specific alternative is one of the most reliable ways to make a habit change stick.</p>
+  </td></tr>` : ''}
+
+  <!-- Pre-Recovery Path Activities -->
   <tr><td style="padding:32px 48px 0;">
     <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">Before You Begin</p>
-    <h2 style="margin:0 0 10px;font-size:18px;font-weight:800;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;">Pre-Plan Preparation</h2>
-    <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">Gather your necessary tools and read through the solutions in your attached PDF. Silence your notifications, and define a dedicated "home" for your phone — a specific spot where it stays when not in active use.</p>
+    <h2 style="margin:0 0 14px;font-size:18px;font-weight:800;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;">Pre-Recovery Path Activities</h2>
+    <p style="margin:0 0 14px;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">Complete these before Week 1 starts. They take less than an hour and dramatically improve your chances of following through.</p>
+    <table cellpadding="0" cellspacing="0" style="width:100%;">
+      <tr><td style="padding:7px 0;vertical-align:top;width:20px;font-size:13px;color:#5c8260;">&#9744;</td><td style="padding:7px 0 7px 8px;font-size:13px;color:#555;font-family:Inter,sans-serif;line-height:1.5;">Silence all non-essential notifications on your phone</td></tr>
+      <tr><td style="padding:7px 0;vertical-align:top;font-size:13px;color:#5c8260;">&#9744;</td><td style="padding:7px 0 7px 8px;font-size:13px;color:#555;font-family:Inter,sans-serif;line-height:1.5;">Give your phone a dedicated "home" — a spot in a room you don't use for sleep or focused work</td></tr>
+      <tr><td style="padding:7px 0;vertical-align:top;font-size:13px;color:#5c8260;">&#9744;</td><td style="padding:7px 0 7px 8px;font-size:13px;color:#555;font-family:Inter,sans-serif;line-height:1.5;">Delete your highest-trigger apps — you can always reinstall them after four weeks</td></tr>
+      <tr><td style="padding:7px 0;vertical-align:top;font-size:13px;color:#5c8260;">&#9744;</td><td style="padding:7px 0 7px 8px;font-size:13px;color:#555;font-family:Inter,sans-serif;line-height:1.5;">Tell one person you trust what you're doing — social accountability makes a real difference</td></tr>
+      <tr><td style="padding:7px 0;vertical-align:top;font-size:13px;color:#5c8260;">&#9744;</td><td style="padding:7px 0 7px 8px;font-size:13px;color:#555;font-family:Inter,sans-serif;line-height:1.5;">Write down what you want back: time, focus, sleep, relationships — make it specific</td></tr>
+    </table>
   </td></tr>
   <tr><td style="padding:20px 48px;"><hr style="border:none;border-top:1px solid #eeece9;"/></td></tr>
 
   <!-- Week 1 -->
   <tr><td style="padding:0 48px;">
     <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">Week 01</p>
-    <h2 style="margin:0 0 10px;font-size:18px;font-weight:800;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;">Phase 1: The Reset</h2>
-    <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">Start your chosen hobby or interest. Inform friends and family of the challenge — social accountability dramatically improves follow-through. Write down your intentions. Brace for the biological pressure to revert to your phone. This is normal, and temporary.</p>
+    <h2 style="margin:0 0 10px;font-size:18px;font-weight:800;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;">Battling the Instinct</h2>
+    <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">The goal this week is simple: stop picking up your phone without meaning to. Every time you reach for it automatically — out of boredom, habit, or anxiety — pause and ask whether you actually intend to use it. You will be surprised how often the answer is no. That moment of awareness is where the change begins.</p>
   </td></tr>
   <tr><td style="padding:20px 48px;"><hr style="border:none;border-top:1px solid #eeece9;"/></td></tr>
 
   <!-- Week 2 -->
   <tr><td style="padding:0 48px;">
     <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">Week 02</p>
-    <h2 style="margin:0 0 10px;font-size:18px;font-weight:800;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;">Phase 2: The Itch</h2>
-    <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">Fully delete your highest-trigger apps. Not mute — delete. This is the most uncomfortable week. The discomfort you feel is your dopamine system recalibrating. Sit with the itch rather than scratching it. Each time you resist the urge, you are physically rewiring the habit loop.</p>
+    <h2 style="margin:0 0 10px;font-size:18px;font-weight:800;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;">Tackling the Withdrawal</h2>
+    <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">This is the hardest week for most people. The urge to scroll peaks before it fades — restlessness, low mood, and boredom are all signs your brain is recalibrating to lower stimulation. Sit with the discomfort rather than relieving it. Each time you do, the habit loop loses a little of its grip. It will not always feel this hard.</p>
   </td></tr>
   <tr><td style="padding:20px 48px;"><hr style="border:none;border-top:1px solid #eeece9;"/></td></tr>
 
   <!-- Week 3 -->
   <tr><td style="padding:0 48px;">
     <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">Week 03</p>
-    <h2 style="margin:0 0 10px;font-size:18px;font-weight:800;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;">Phase 3: Rebuilding Focus</h2>
-    <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">Most people notice a shift here. Sleep becomes deeper, concentration returns, and activities that felt slow begin to feel engaging again. Concentrate heavily on your chosen hobby and let yourself become absorbed.</p>
+    <h2 style="margin:0 0 10px;font-size:18px;font-weight:800;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;">Setting in Good Habits</h2>
+    <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">Most people notice a genuine shift this week. Sleep improves, concentration returns, and things that felt slow or boring — reading, conversation, being outside — start to feel rewarding again. Use this momentum to build the replacement habits you identified. The goal is no longer just to resist the phone, but to build a life that does not need it.</p>
   </td></tr>
   <tr><td style="padding:20px 48px;"><hr style="border:none;border-top:1px solid #eeece9;"/></td></tr>
 
   <!-- Week 4 -->
   <tr><td style="padding:0 48px 32px;">
     <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#aaa;font-family:Inter,sans-serif;">Week 04</p>
-    <h2 style="margin:0 0 10px;font-size:18px;font-weight:800;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;">Phase 4: The New Normal</h2>
-    <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">Freedom from compulsive loops and dopamine irregularity. Your phone is a tool again rather than a pull. The goal now is to make this your permanent baseline — designing your environment so that presence, not scrolling, is the path of least resistance.</p>
+    <h2 style="margin:0 0 10px;font-size:18px;font-weight:800;color:#2c2c2c;font-family:Outfit,Inter,sans-serif;">Consolidating and Planning the Post-Recovery Life</h2>
+    <p style="margin:0;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">The final week is about locking in what you have built and deciding how you want to use your phone going forward — on your terms. Revisit your starting intentions. What have you got back? What do you want to protect? Design your environment so that the good habits are the easy habits, and the old loops are the ones with friction.</p>
+  </td></tr>
+
+  <!-- Tools link -->
+  <tr><td style="padding:0 48px 32px;border-bottom:1px solid #eeece9;">
+    <p style="margin:0 0 8px;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">Need support along the way? We have a set of practical tools to help you build structure during your recovery — from focus timers to habit trackers. <a href="https://dopamine-hero.vercel.app/tools" style="color:#5c8260;text-decoration:underline;">Explore the tools here</a>.</p>
   </td></tr>
 
   <!-- CTA -->
-  <tr><td style="padding:24px 48px 40px;background:#2c2c2c;">
-    <p style="margin:0 0 6px;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:rgba(255,255,255,0.35);font-family:Inter,sans-serif;">Your next step</p>
-    <p style="margin:0 0 20px;font-size:15px;color:rgba(255,255,255,0.75);font-family:Inter,sans-serif;line-height:1.6;">Your full written assessment is attached. Use it alongside our tools to build the structure you need to make this permanent.</p>
-    <a href="https://mindsovereignty.com/#tools" style="display:inline-block;background:#5c8260;color:#fff;font-family:Outfit,Inter,sans-serif;font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;padding:14px 28px;">Ready to Start? Take me to my recovery dashboard.</a>
+  <tr><td style="padding:32px 48px 40px;background:#2c2c2c;">
+    <p style="margin:0 0 6px;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:rgba(255,255,255,0.35);font-family:Inter,sans-serif;">When you're ready</p>
+    <p style="margin:0 0 20px;font-size:15px;color:rgba(255,255,255,0.75);font-family:Inter,sans-serif;line-height:1.6;">Your plan is set. Your tools are waiting. The only thing left is to begin.</p>
+    <a href="https://dopamine-hero.vercel.app/tools" style="display:inline-block;background:#5c8260;color:#fff;font-family:Outfit,Inter,sans-serif;font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;padding:14px 28px;">Ready to start your journey?</a>
   </td></tr>
 
   <!-- Footer -->
   <tr><td style="padding:20px 48px;border-top:1px solid #eeece9;">
-    <p style="margin:0;font-size:11px;color:#bbb;font-family:Inter,sans-serif;">&copy; ${year} Mind Sovereignty &middot; You received this because you completed our Digital Health Assessment.<br/>No spam, ever.</p>
+    <p style="margin:0;font-size:11px;color:#bbb;font-family:Inter,sans-serif;">&copy; ${year} Mind Sovereignty &middot; You received this because you completed our quiz.<br/>No spam, ever.</p>
   </td></tr>
 
 </table>
@@ -563,9 +603,9 @@ serve(async (req) => {
     }
 
     // Parse audit data
-    let auditData: Record<string, string> = {}
+    let auditData: Record<string, unknown> = {}
     if (rawAudit && typeof rawAudit === 'object' && !Array.isArray(rawAudit)) {
-      auditData = rawAudit as Record<string, string>
+      auditData = rawAudit as Record<string, unknown>
     } else if (typeof rawAudit === 'string') {
       try { auditData = JSON.parse(rawAudit) } catch { /* ignore */ }
     }
@@ -583,7 +623,7 @@ serve(async (req) => {
     // Generate PDF — gracefully degrade if it fails
     let attachments: unknown[] = []
     try {
-      const pdfBytes  = await buildPDF(profileType, scores, auditData)
+      const pdfBytes  = await buildPDF(profileType, scores, auditData as Record<string, string>)
       const pdfBase64 = btoa(pdfBytes.reduce((s, b) => s + String.fromCharCode(b), ''))
       attachments = [{
         filename: 'mind-sovereignty-assessment.pdf',
@@ -602,7 +642,7 @@ serve(async (req) => {
       body: JSON.stringify({
         from:        'Mind Sovereignty <onboarding@resend.dev>',
         to:          [email],
-        subject:     'Your Sovereignty Assessment & 4-Week Roadmap',
+        subject:     'Your Recovery Plan — Mind Sovereignty',
         html,
         attachments,
       }),
