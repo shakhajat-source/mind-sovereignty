@@ -444,12 +444,17 @@ export default function QuizModal({ isOpen, onClose }) {
                   <h2 className="font-display font-black text-3xl text-neutral-900 leading-tight tracking-tight">
                     Your Digital Health Profile
                   </h2>
-                  <p className="text-sm text-neutral-600 font-light leading-relaxed">
-                    Complete this assessment to unlock your results and start your customised 4-week recovery
-                    plan. Be honest — we need accurate data to build your exit strategy. There is zero shame
-                    in your results. Modern tech is designed to bypass human willpower. This is a conflict of
-                    biology, not a failure of character.
-                  </p>
+                  <div className="space-y-3 text-sm text-neutral-600 font-light leading-relaxed">
+                    <p>
+                      Complete this assessment to unlock your results and start your customised 4-week recovery plan.
+                    </p>
+                    <p>
+                      Try to be as accurate as you can — we need reliable data to give us the best chance at building a recovery plan that works for you.
+                    </p>
+                    <p>
+                      Remember, there should be zero shame in your results. Modern tech is designed to bypass human willpower. And we're here to give you the right science-backed tools to fight back against that engineering.
+                    </p>
+                  </div>
                   <button onClick={() => { setDir(1); setStep(1) }}
                     className="w-full bg-[#1A1A1A] text-white text-sm font-bold tracking-widest uppercase py-4 hover:bg-black transition-colors mt-2">
                     Start Assessment
