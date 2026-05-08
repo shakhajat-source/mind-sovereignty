@@ -3,15 +3,19 @@ import { Routes, Route } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Hero from './components/Hero'
 import QuizModal from './components/QuizModal'
+import AuthModal from './components/AuthModal'
+import ProtectedRoute from './components/ProtectedRoute'
 import ToolsPage from './pages/ToolsPage'
+import Dashboard from './pages/Dashboard'
 
 export default function App() {
-  const [quizOpen, setQuizOpen] = useState(false)
+  const [quizOpen, setQuizOpen]   = useState(false)
+  const [authOpen, setAuthOpen]   = useState(false)
 
   return (
     <div className="min-h-screen bg-[#F2F0ED] font-sans selection:bg-[#1A1A1A] selection:text-white">
 
-      <Navbar />
+      <Navbar onOpenAuth={() => setAuthOpen(true)} />
 
       <Routes>
         <Route path="/" element={
@@ -23,16 +27,13 @@ export default function App() {
               <div className="max-w-6xl mx-auto px-6 md:px-16">
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-12 md:gap-20 items-start">
 
-                  {/* Left — headline + accent */}
                   <div className="md:col-span-2 space-y-5">
                     <h2 className="font-sans font-bold text-4xl md:text-5xl text-neutral-900 tracking-tighter leading-tight">
                       Rebuild your free time.
                     </h2>
-                    {/* Brand-green accent line */}
                     <div className="h-1 w-16 bg-emerald-600" />
                   </div>
 
-                  {/* Right — body copy */}
                   <div className="md:col-span-3 space-y-6">
                     <p className="text-base text-neutral-800 font-light leading-relaxed">
                       The modern smartphone is the most successful attention-capture device ever
@@ -66,11 +67,16 @@ export default function App() {
                 </div>
               </div>
             </section>
-
           </>
         } />
 
         <Route path="/tools" element={<ToolsPage />} />
+
+        <Route path="/dashboard" element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        } />
       </Routes>
 
       <footer className="border-t border-neutral-200 px-8 py-12 text-center bg-white">
@@ -80,6 +86,7 @@ export default function App() {
       </footer>
 
       <QuizModal isOpen={quizOpen} onClose={() => setQuizOpen(false)} />
+      <AuthModal  isOpen={authOpen} onClose={() => setAuthOpen(false)} />
     </div>
   )
 }

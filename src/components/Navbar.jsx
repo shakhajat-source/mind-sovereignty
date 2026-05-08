@@ -1,12 +1,14 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom'
+import { useAuth } from '../context/AuthProvider'
 
-export default function Navbar() {
-  const { pathname } = useLocation();
-  const onHome = pathname === '/';
+export default function Navbar({ onOpenAuth }) {
+  const { pathname } = useLocation()
+  const { session }  = useAuth()
+  const onHome       = pathname === '/'
 
   const linkClass = onHome
     ? 'text-white/70 hover:text-white'
-    : 'text-neutral-500 hover:text-neutral-900';
+    : 'text-neutral-500 hover:text-neutral-900'
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-40 px-8 md:px-16 py-6 flex items-center justify-between">
@@ -43,7 +45,24 @@ export default function Navbar() {
         </li>
       </ul>
 
-      <div className="relative hidden md:block w-32" />
+      {/* Auth CTA */}
+      <div className="relative hidden md:flex items-center w-32 justify-end">
+        {session ? (
+          <Link
+            to="/dashboard"
+            className="text-[11px] font-black tracking-widest uppercase bg-[#10b981] text-black px-4 py-2 hover:opacity-90 transition-opacity"
+          >
+            Dashboard
+          </Link>
+        ) : (
+          <button
+            onClick={onOpenAuth}
+            className={`text-[11px] font-bold tracking-widest uppercase transition-colors ${linkClass}`}
+          >
+            Log In
+          </button>
+        )}
+      </div>
     </nav>
-  );
+  )
 }
