@@ -4,8 +4,6 @@ import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { supabase } from '../lib/supabase'
-import { startJourney } from '../lib/journeys'
 
 /* ─────────────────────────────────────────────────────────────────────────────
    STEP MAP
@@ -271,15 +269,11 @@ const STEP_VARIANTS = {
 /* ─────────────────────────────────────────────────────────────────────────────
    COMPONENT
 ───────────────────────────────────────────────────────────────────────────── */
-export default function QuizModal({ isOpen, onClose }) {
-  const [step,       setStep]       = useState(0)
-  const [dir,        setDir]        = useState(1)
-  const [answers,    setAnswers]    = useState(initAnswers)
-  const [email,      setEmail]      = useState('')
-  const [newsletter, setNewsletter] = useState(false)
-  const [emailSent,  setEmailSent]  = useState(false)
-  const [saving,     setSaving]     = useState(false)
-  const [refNum]                    = useState(generateRef)
+export default function QuizModal({ isOpen, onClose, onStartProtocol }) {
+  const [step,    setStep]    = useState(0)
+  const [dir,     setDir]     = useState(1)
+  const [answers, setAnswers] = useState(initAnswers)
+  const [refNum]              = useState(generateRef)
 
   useEffect(() => {
     document.body.style.overflow = isOpen ? 'hidden' : ''
@@ -289,7 +283,6 @@ export default function QuizModal({ isOpen, onClose }) {
   useEffect(() => {
     if (!isOpen) {
       setStep(0); setDir(1); setAnswers(initAnswers())
-      setEmail(''); setNewsletter(false); setEmailSent(false); setSaving(false)
     }
   }, [isOpen])
 
@@ -345,38 +338,6 @@ export default function QuizModal({ isOpen, onClose }) {
     if (step <= 0) return
     setDir(-1)
     setStep(s => s - 1)
-  }
-
-  /* ── Email submit ──────────────────────────────────────────────────────── */
-  async function handleEmailSubmit(e) {
-    e.preventDefault()
-    if (!email.trim() || saving) return
-    setSaving(true)
-
-    const primaryContent = Object.entries(answers.content)
-      .sort((a, b) => b[1] - a[1])[0][0]
-
-    const { error } = await supabase.from('quiz_submissions').insert({
-      email:                email.trim().toLowerCase(),
-      primary_magnet:       primaryContent,
-      profile_type:         null,
-      radar_scores:         scores,
-      audit_data: {
-        hours:     answers.hours,
-        zombie:    answers.zombie,
-        pickups:   answers.pickups,
-        content:   answers.content,
-        situation: answers.situation,
-        attention: answers.attention,
-        impact:    answers.impact,
-        interests: answers.interests,
-        refNum,
-      },
-      newsletter_subscribed: newsletter,
-    })
-    if (error) console.error('quiz_submissions error:', error)
-    setSaving(false)
-    setEmailSent(true)
   }
 
   /* ── Shared styles ─────────────────────────────────────────────────────── */
@@ -680,16 +641,9 @@ export default function QuizModal({ isOpen, onClose }) {
                   answers={answers}
                   scores={scores}
                   refNum={refNum}
-                  email={email}
-                  setEmail={setEmail}
-                  newsletter={newsletter}
-                  setNewsletter={setNewsletter}
-                  emailSent={emailSent}
-                  saving={saving}
-                  onEmailSubmit={handleEmailSubmit}
+                  onStartProtocol={onStartProtocol}
                   onRetake={() => {
                     setDir(-1); setStep(0); setAnswers(initAnswers())
-                    setEmailSent(false); setEmail(''); setSaving(false); setNewsletter(false)
                   }}
                 />
               )}
@@ -706,17 +660,14 @@ export default function QuizModal({ isOpen, onClose }) {
 /* ─────────────────────────────────────────────────────────────────────────────
    RESULTS SCREEN
 ───────────────────────────────────────────────────────────────────────────── */
-function ResultsScreen({
-  answers, scores, refNum,
-  email, setEmail, newsletter, setNewsletter,
-  emailSent, saving, onEmailSubmit, onRetake,
-}) {
-  const [journeyState, setJourneyState] = useState('idle') // 'idle' | 'loading' | 'done' | 'error'
+function ResultsScreen({ answers, scores, refNum, onStartProtocol, onRetake }) {
+  const [launching, setLaunching] = useState(false)
 
-  async function handleStartJourney() {
-    setJourneyState('loading')
-    const { error } = await startJourney(email, answers.interests)
-    setJourneyState(error ? 'error' : 'done')
+  async function handleProtocol() {
+    setLaunching(true)
+    await onStartProtocol(answers.interests)
+    // If auth modal opens, launching state doesn't matter — modal takes over
+    setLaunching(false)
   }
 
   const today = new Date().toLocaleDateString('en-GB', {
@@ -808,98 +759,31 @@ function ResultsScreen({
         </div>
       )}
 
-      {/* CTA / Email Capture */}
-      <div className="px-10 py-7 space-y-4">
-        <div className="flex items-baseline gap-3">
-          <span className="text-xs font-mono text-neutral-300">0{answers.interests ? '4' : '3'}</span>
-          <div>
-            <p className="text-xs tracking-widest uppercase text-neutral-400 font-light">Get Your 4-Week Plan</p>
-            <p className="text-xs text-neutral-300 font-light mt-0.5">Free · Delivered to your inbox · No spam</p>
-          </div>
+      {/* START MY PROTOCOL */}
+      <div className="bg-black px-10 py-9 space-y-5">
+        <div>
+          <p className="text-[10px] tracking-[0.3em] uppercase text-[#10b981] font-bold mb-2">
+            28-Day Recovery Protocol
+          </p>
+          <h3 className="text-2xl font-black text-white tracking-tight leading-snug">
+            Ready to take back control?
+          </h3>
+          <p className="text-xs text-neutral-500 font-light mt-2 leading-relaxed">
+            Create your account to lock in your personalised protocol. We'll guide you through
+            the full 28 days with targeted check-ins — no willpower required.
+          </p>
         </div>
-
-        {!emailSent ? (
-          <form onSubmit={onEmailSubmit} className="space-y-3">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <input
-                type="email" required placeholder="your@email.com"
-                value={email} onChange={e => setEmail(e.target.value)}
-                className="flex-1 bg-white border border-neutral-200 px-4 py-3.5 text-sm font-sans
-                           text-neutral-900 placeholder:text-neutral-300
-                           focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-              <button type="submit" disabled={saving}
-                className={[
-                  'bg-[#1A1A1A] text-white whitespace-nowrap text-xs font-bold tracking-widest',
-                  'uppercase px-6 py-3.5 hover:bg-black transition-colors',
-                  saving ? 'opacity-50 cursor-not-allowed' : '',
-                ].join(' ')}>
-                {saving ? 'Saving…' : 'Send My Plan'}
-              </button>
-            </div>
-            <label className="flex items-center gap-3 cursor-pointer group">
-              <span onClick={() => setNewsletter(n => !n)}
-                className={[
-                  'w-4 h-4 border flex-shrink-0 flex items-center justify-center',
-                  'transition-colors duration-150 cursor-pointer',
-                  newsletter
-                    ? 'bg-emerald-600 border-emerald-600'
-                    : 'border-neutral-300 group-hover:border-emerald-400',
-                ].join(' ')}>
-                {newsletter && (
-                  <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
-                    <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                )}
-              </span>
-              <span className="text-xs text-neutral-400 font-light" onClick={() => setNewsletter(n => !n)}>
-                Subscribe to research updates on attention, habit, and focus.
-              </span>
-            </label>
-          </form>
-        ) : (
-          <div className="space-y-4">
-            {/* Confirmation */}
-            <div className="bg-[#1A1A1A] px-6 py-5 space-y-1">
-              <p className="text-base font-display font-bold text-white">Your plan is on its way.</p>
-              <p className="text-xs text-white/55 font-light leading-relaxed">
-                Check your inbox for your personalised 4-week recovery plan. It includes a full breakdown of your
-                results and a practical week-by-week guide to get started.
-              </p>
-            </div>
-
-            {/* Start Journey CTA */}
-            {journeyState !== 'done' ? (
-              <div className="border border-neutral-200 px-6 py-5 space-y-3">
-                <p className="text-sm font-semibold text-neutral-900">Ready to start your 28-day journey?</p>
-                <p className="text-xs text-neutral-500 leading-relaxed">
-                  We'll send you a check-in email every few days to keep you on track. No extra sign-up needed.
-                </p>
-                <button
-                  onClick={handleStartJourney}
-                  disabled={journeyState === 'loading'}
-                  className={[
-                    'w-full bg-emerald-600 text-white text-xs font-bold tracking-widest uppercase py-3.5',
-                    'hover:bg-emerald-700 transition-colors',
-                    journeyState === 'loading' ? 'opacity-50 cursor-not-allowed' : '',
-                  ].join(' ')}
-                >
-                  {journeyState === 'loading' ? 'Starting…' : 'Start My Journey'}
-                </button>
-                {journeyState === 'error' && (
-                  <p className="text-xs text-red-500">Something went wrong — please try again.</p>
-                )}
-              </div>
-            ) : (
-              <div className="border border-emerald-200 bg-emerald-50 px-6 py-5">
-                <p className="text-sm font-semibold text-emerald-800">You're in. Day 1 email coming tomorrow.</p>
-                <p className="text-xs text-emerald-700 mt-1 leading-relaxed">
-                  Check in every few days — we'll be with you for the full 28.
-                </p>
-              </div>
-            )}
-          </div>
-        )}
+        <button
+          onClick={handleProtocol}
+          disabled={launching}
+          className={[
+            'w-full bg-[#10b981] text-white font-black text-sm tracking-[0.2em] uppercase py-5',
+            'transition-opacity hover:opacity-90',
+            launching ? 'opacity-50 cursor-not-allowed' : '',
+          ].join(' ')}
+        >
+          {launching ? 'Loading…' : 'Start My Protocol'}
+        </button>
       </div>
 
       {/* Retake */}

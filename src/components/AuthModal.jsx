@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 
 const TABS = ['login', 'signup']
 
-export default function AuthModal({ isOpen, onClose }) {
+export default function AuthModal({ isOpen, onClose, onSignUpSuccess }) {
   const [tab, setTab]         = useState('login')
   const [email, setEmail]     = useState('')
   const [password, setPassword] = useState('')
@@ -40,8 +40,14 @@ export default function AuthModal({ isOpen, onClose }) {
       const result = await supabase.auth.signUp({ email, password })
       error = result.error
       if (!error) {
-        setStatus('success')
-        setMessage('Check your email for a confirmation link.')
+        if (result.data.session) {
+          // Email confirmation disabled — session is live immediately, hand off to parent
+          onSignUpSuccess?.(result.data.user)
+        } else {
+          // Email confirmation required — stay open, show message
+          setStatus('success')
+          setMessage('Check your inbox to confirm your account, then log in to start your journey.')
+        }
         return
       }
     } else {

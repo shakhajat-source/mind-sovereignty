@@ -23,7 +23,7 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
   // ── Parse and validate body ───────────────────────────────────────────────
-  let body: { email?: string; goal?: string | null }
+  let body: { email?: string; goal?: string | null; userId?: string | null }
   try {
     body = await req.json()
   } catch {
@@ -32,8 +32,9 @@ serve(async (req) => {
     })
   }
 
-  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
-  const goal  = typeof body.goal  === 'string' ? body.goal.trim() || null : null
+  const email  = typeof body.email  === 'string' ? body.email.trim().toLowerCase() : ''
+  const goal   = typeof body.goal   === 'string' ? body.goal.trim() || null : null
+  const userId = typeof body.userId === 'string' ? body.userId : null
 
   if (!email) {
     return new Response(JSON.stringify({ error: 'email is required' }), {
@@ -57,7 +58,7 @@ serve(async (req) => {
   // ── 1. Insert new journey row ─────────────────────────────────────────────
   const { data: journey, error: insertErr } = await supabase
     .from('user_journeys')
-    .insert({ email, target_goal: goal })
+    .insert({ email, target_goal: goal, user_id: userId })
     .select('id, start_date')
     .single()
 

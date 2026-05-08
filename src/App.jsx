@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, useNavigate } from 'react-router-dom'
+import { useAuth } from './context/AuthProvider'
+import { startJourney } from './lib/journeys'
 import Navbar from './components/Navbar'
 import Hero from './components/Hero'
 import QuizModal from './components/QuizModal'
@@ -9,8 +11,41 @@ import ToolsPage from './pages/ToolsPage'
 import Dashboard from './pages/Dashboard'
 
 export default function App() {
-  const [quizOpen, setQuizOpen]   = useState(false)
-  const [authOpen, setAuthOpen]   = useState(false)
+  const navigate        = useNavigate()
+  const { session }     = useAuth()
+  const [quizOpen, setQuizOpen] = useState(false)
+  const [authOpen, setAuthOpen] = useState(false)
+  // goal string from the quiz, held until auth completes
+  const [pendingGoal, setPendingGoal] = useState(null)
+
+  // Called by ResultsScreen "START MY PROTOCOL" button
+  async function handleStartProtocol(goal) {
+    if (session) {
+      // Already logged in — skip auth modal
+      await startJourney(session.user.email, goal, session.user.id)
+      setQuizOpen(false)
+      navigate('/dashboard')
+    } else {
+      setPendingGoal(goal)
+      setAuthOpen(true)
+    }
+  }
+
+  // Called by AuthModal after a successful signup that produced a live session
+  async function handleSignUpSuccess(user) {
+    setAuthOpen(false)
+    if (pendingGoal !== null) {
+      await startJourney(user.email, pendingGoal, user.id)
+      setPendingGoal(null)
+      setQuizOpen(false)
+    }
+    navigate('/dashboard')
+  }
+
+  function closeAuth() {
+    setAuthOpen(false)
+    setPendingGoal(null)
+  }
 
   return (
     <div className="min-h-screen bg-[#F2F0ED] font-sans selection:bg-[#1A1A1A] selection:text-white">
@@ -85,8 +120,16 @@ export default function App() {
         </p>
       </footer>
 
-      <QuizModal isOpen={quizOpen} onClose={() => setQuizOpen(false)} />
-      <AuthModal  isOpen={authOpen} onClose={() => setAuthOpen(false)} />
+      <QuizModal
+        isOpen={quizOpen}
+        onClose={() => setQuizOpen(false)}
+        onStartProtocol={handleStartProtocol}
+      />
+      <AuthModal
+        isOpen={authOpen}
+        onClose={closeAuth}
+        onSignUpSuccess={handleSignUpSuccess}
+      />
     </div>
   )
 }
