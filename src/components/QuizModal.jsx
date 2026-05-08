@@ -43,21 +43,24 @@ const PICKUP_OPTIONS = [
 ]
 
 /* ── Step 2: Content ─────────────────────────────────────────────────────── */
-const CONTENT_KEYS = ['social', 'notSure', 'comm', 'utility']
+const CONTENT_KEYS = ['social', 'comm', 'utility', 'notSure']
 const CONTENT_META = {
-  social:  { label: 'Social',   chartColor: '#C0392B', textColor: '#C0392B' },
-  notSure: { label: 'Not Sure', chartColor: '#7F8C8D', textColor: '#5a6060' },
-  comm:    { label: 'Comm',     chartColor: '#2980B9', textColor: '#2980B9' },
-  utility: { label: 'Utility',  chartColor: '#F39C12', textColor: '#b87800' },
+  social:  { label: 'Social',          desc: 'Social media and entertainment — Instagram, TikTok, Twitter/X, YouTube, Reddit', chartColor: '#C0392B', textColor: '#C0392B' },
+  comm:    { label: 'Communications',  desc: 'Messaging and calls — WhatsApp, iMessage, email, Snapchat',                      chartColor: '#2980B9', textColor: '#2980B9' },
+  utility: { label: 'Utility',         desc: 'Practical apps — Maps, Calendar, Banking, Shopping',                             chartColor: '#F39C12', textColor: '#b87800' },
+  notSure: { label: 'Not Sure',        desc: 'Time you can\'t easily account for — often unconscious browsing or switching between apps', chartColor: '#7F8C8D', textColor: '#5a6060' },
 }
 
 /* ── Step 3: Situation ───────────────────────────────────────────────────── */
 const SITUATION_OPTIONS = [
-  { key: 'morning', label: 'Morning'      },
-  { key: 'work',    label: 'Work / Study' },
-  { key: 'evening', label: 'Evening'      },
-  { key: 'bed',     label: 'Before Bed'   },
+  { key: 'morning',    label: 'First activity of the day after waking up',                  time: 'e.g. 6–8am'    },
+  { key: 'throughout_morning', label: 'Throughout the morning',                             time: 'e.g. 8am–12pm' },
+  { key: 'work',       label: 'During normal productive hours (whilst working or studying)', time: 'e.g. 9am–5pm'  },
+  { key: 'evening',    label: 'During wind down hours',                                      time: 'e.g. 5–9pm'    },
+  { key: 'bed',        label: 'Whilst in bed ready to sleep',                                time: 'e.g. 9pm+'     },
+  { key: 'spare',      label: 'Any spare moment throughout the day',                         time: null            },
 ]
+const SITUATION_WEIGHTS = { spare: 40 }
 
 /* ── Step 4: Attention (moved up) ────────────────────────────────────────── */
 const ATTENTION_OPTIONS = [
@@ -100,10 +103,10 @@ function computeScores(answers) {
 
   const content = Math.min(100, (answers.content.social ?? 0) + (answers.content.notSure ?? 0))
 
-  const situation = Math.min(100, answers.situation.length * 25)
+  const situation = Math.min(100, answers.situation.reduce((sum, k) => sum + (SITUATION_WEIGHTS[k] ?? 20), 0))
 
-  // IMPACT: highest slider value
-  const impact = Math.max(0, ...Object.values(answers.impact))
+  // IMPACT: highest slider value (0–10 scale → multiply by 10 for radar)
+  const impact = Math.min(100, Math.max(0, ...Object.values(answers.impact)) * 10)
 
   const attention = ATTENTION_OPTIONS.find(o => o.key === answers.attention)?.score ?? 0
 
@@ -145,7 +148,7 @@ function getContentInsight(content) {
 }
 
 function getSituationInsight(situation) {
-  const score = situation.length * 25
+  const score = Math.min(100, situation.reduce((sum, k) => sum + (SITUATION_WEIGHTS[k] ?? 20), 0))
   if (score >= 75) {
     return "Your phone is present in almost every part of your day — there aren't many gaps where it isn't in the picture. Building in a few proper phone-free periods will make a real difference, and those gaps will start to feel normal quite quickly."
   }
@@ -472,8 +475,8 @@ export default function QuizModal({ isOpen, onClose }) {
                     <h3 className="font-display font-bold text-lg text-neutral-900 leading-snug">
                       Average daily screen time:
                     </h3>
-                    <p className="text-xs text-neutral-400 font-light">
-                      iOS: Settings → Screen Time. Android: Settings → Digital Wellbeing.
+                    <p className="text-xs text-neutral-500">
+                      You can check this by searching for Screen Time (on iOS) or searching for Digital Wellbeing (on Android).
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {HOURS_OPTIONS.map(opt => (
@@ -503,8 +506,8 @@ export default function QuizModal({ isOpen, onClose }) {
                     <h3 className="font-display font-bold text-lg text-neutral-900 leading-snug">
                       Estimated daily phone pickups:
                     </h3>
-                    <p className="text-xs text-neutral-400 font-light">
-                      iOS: Screen Time → Pickups. Android: Digital Wellbeing → Unlocks.
+                    <p className="text-xs text-neutral-500">
+                      You can check this by searching for Screen Time and selecting Pickups (on iOS) or searching for Digital Wellbeing and selecting Unlocks (on Android).
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {PICKUP_OPTIONS.map(opt => (
@@ -529,7 +532,7 @@ export default function QuizModal({ isOpen, onClose }) {
                     <h2 className="font-display font-bold text-2xl text-neutral-900 leading-snug tracking-tight">
                       What does your screen time consist of?
                     </h2>
-                    <p className="text-sm text-neutral-400 font-light">
+                    <p className="text-sm text-neutral-500">
                       Adjust the sliders to reflect your breakdown — they always sum to 100%.
                     </p>
                   </div>
@@ -547,7 +550,7 @@ export default function QuizModal({ isOpen, onClose }) {
                     <h2 className="font-display font-bold text-2xl text-neutral-900 leading-snug tracking-tight">
                       When does the usage typically occur?
                     </h2>
-                    <p className="text-sm text-neutral-400 font-light">Select all that apply.</p>
+                    <p className="text-sm text-neutral-500">Select all that apply — your timetable may vary from the suggested hours.</p>
                   </div>
                   <ul className="space-y-2">
                     {SITUATION_OPTIONS.map(opt => {
@@ -558,7 +561,10 @@ export default function QuizModal({ isOpen, onClose }) {
                             className={optionClass(active)}>
                             <span className="flex items-center gap-3">
                               <CheckBox active={active} />
-                              {opt.label}
+                              <span className="flex flex-col gap-0.5 text-left">
+                                <span>{opt.label}</span>
+                                {opt.time && <span className="text-xs text-neutral-400">{opt.time}</span>}
+                              </span>
                             </span>
                           </button>
                         </li>
@@ -589,7 +595,7 @@ export default function QuizModal({ isOpen, onClose }) {
                               <RadioDot active={active} />
                               <span className="flex flex-col gap-0.5">
                                 <span className="text-sm font-semibold text-neutral-800">{opt.label}</span>
-                                <span className="text-xs font-light text-neutral-500 leading-relaxed">{opt.desc}</span>
+                                <span className="text-xs text-neutral-500 leading-relaxed">{opt.desc}</span>
                               </span>
                             </span>
                           </button>
@@ -610,8 +616,8 @@ export default function QuizModal({ isOpen, onClose }) {
                     <h2 className="font-display font-bold text-2xl text-neutral-900 leading-snug tracking-tight">
                       Which of these would you most like to improve?
                     </h2>
-                    <p className="text-sm text-neutral-400 font-light">
-                      Slide each one to show how important it is to you — 0 means it's not a concern, 100 means it's a top priority.
+                    <p className="text-sm text-neutral-500">
+                      Slide each one to show how important it is to you — 0 means it's not a concern, 10 means it's a top priority.
                     </p>
                   </div>
                   <div className="space-y-6">
@@ -623,13 +629,13 @@ export default function QuizModal({ isOpen, onClose }) {
                             <label className="text-sm font-semibold text-neutral-800">{opt.label}</label>
                             <span className="text-xs font-mono text-neutral-400 ml-2 flex-shrink-0">{val}</span>
                           </div>
-                          <p className="text-xs text-neutral-400 font-light">{opt.subLabel}</p>
+                          <p className="text-xs text-neutral-500">{opt.subLabel}</p>
                           <input
-                            type="range" min={0} max={100} value={val}
+                            type="range" min={0} max={10} value={val}
                             onChange={e => setImpact(opt.key, e.target.value)}
                             className="w-full h-1.5 appearance-none cursor-pointer rounded-full"
                             style={{
-                              background: `linear-gradient(to right, #5c8260 ${val}%, #e5e7eb ${val}%)`,
+                              background: `linear-gradient(to right, #5c8260 ${val * 10}%, #e5e7eb ${val * 10}%)`,
                             }}
                           />
                         </div>
@@ -649,7 +655,7 @@ export default function QuizModal({ isOpen, onClose }) {
                     <h2 className="font-display font-bold text-2xl text-neutral-900 leading-snug tracking-tight">
                       If you had an extra hour of calm each day, what would you do with it?
                     </h2>
-                    <p className="text-xs text-neutral-400 font-light leading-relaxed">
+                    <p className="text-xs text-neutral-500 leading-relaxed">
                       Think about a hobby, skill, or activity you've been meaning to get back to — or something
                       you've always wanted to try. Even a vague answer is useful here.
                     </p>
@@ -907,7 +913,7 @@ function ContentSliders({ content, onChange }) {
 
       <div className="space-y-4">
         {CONTENT_KEYS.map(key => {
-          const { label, chartColor, textColor } = CONTENT_META[key]
+          const { label, desc, chartColor, textColor } = CONTENT_META[key]
           const val = content[key]
           return (
             <div key={key} className="space-y-1.5">
@@ -915,6 +921,7 @@ function ContentSliders({ content, onChange }) {
                 <label className="text-sm font-medium" style={{ color: textColor }}>{label}</label>
                 <span className="text-sm font-mono text-neutral-500">{val}%</span>
               </div>
+              <p className="text-xs text-neutral-500">{desc}</p>
               <input
                 type="range" min={0} max={100} value={val}
                 onChange={e => onChange(key, Number(e.target.value))}

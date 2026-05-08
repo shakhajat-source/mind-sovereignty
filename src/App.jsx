@@ -26,7 +26,7 @@ export default function App() {
                   {/* Left — headline + accent */}
                   <div className="md:col-span-2 space-y-5">
                     <h2 className="font-sans font-bold text-4xl md:text-5xl text-neutral-900 tracking-tighter leading-tight">
-                      Reclaim your free time.
+                      Rebuild your free time.
                     </h2>
                     {/* Brand-green accent line */}
                     <div className="h-1 w-16 bg-emerald-600" />
@@ -55,13 +55,11 @@ export default function App() {
                     </p>
                     <p className="text-base text-neutral-800 font-light leading-relaxed">
                       Rewiring your habits won't happen overnight, but we have one massive
-                      advantage over the tech companies.{' '}
+                      advantage over the tech companies. Real life — for all its messy,
+                      unpredictable flaws — is simply better than the scroll. It's time to{' '}
                       <strong className="font-extrabold text-neutral-900">
-                        Real life — for all its messy, unpredictable flaws — is simply better
-                        than the scroll.
+                        keep your phone in check, reclaim your attention … get back to living.
                       </strong>
-                      {' '}It's time to keep your phone in check, reclaim your attention, and
-                      get back to living.
                     </p>
                   </div>
 
