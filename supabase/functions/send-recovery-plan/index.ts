@@ -431,8 +431,8 @@ function buildEmail(
   scores:      Record<string, number>,
   auditData:   Record<string, unknown>,
 ): string {
-  const interests  = typeof auditData?.interests === 'string' ? auditData.interests : ''
-  const hoursKey   = typeof auditData?.hours === 'string' ? auditData.hours : ''
+  const interests  = typeof auditData['interests'] === 'string' ? (auditData['interests'] as string) : ''
+  const hoursKey   = typeof auditData['hours'] === 'string' ? (auditData['hours'] as string) : ''
   const usageHours = HOURS_LABEL[hoursKey] ?? ''
   const year       = new Date().getFullYear()
 
@@ -540,14 +540,14 @@ function buildEmail(
 
   <!-- Tools link -->
   <tr><td style="padding:0 48px 32px;border-bottom:1px solid #eeece9;">
-    <p style="margin:0 0 8px;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">Need support along the way? We have a set of practical tools to help you build structure during your recovery — from focus timers to habit trackers. <a href="https://dopamine-hero.vercel.app/tools" style="color:#5c8260;text-decoration:underline;">Explore the tools here</a>.</p>
+    <p style="margin:0 0 8px;font-size:13px;line-height:1.7;color:#555;font-family:Inter,sans-serif;">Need support along the way? We have a set of practical tools to help you build structure during your recovery — from focus timers to habit trackers. <a href="https://dopamine-heroo.vercel.app/tools" style="color:#5c8260;text-decoration:underline;">Explore the tools here</a>.</p>
   </td></tr>
 
   <!-- CTA -->
   <tr><td style="padding:32px 48px 40px;background:#2c2c2c;">
     <p style="margin:0 0 6px;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:rgba(255,255,255,0.35);font-family:Inter,sans-serif;">When you're ready</p>
     <p style="margin:0 0 20px;font-size:15px;color:rgba(255,255,255,0.75);font-family:Inter,sans-serif;line-height:1.6;">Your plan is set. Your tools are waiting. The only thing left is to begin.</p>
-    <a href="https://dopamine-hero.vercel.app/tools" style="display:inline-block;background:#5c8260;color:#fff;font-family:Outfit,Inter,sans-serif;font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;padding:14px 28px;">Ready to start your journey?</a>
+    <a href="https://dopamine-heroo.vercel.app/tools" style="display:inline-block;background:#5c8260;color:#fff;font-family:Outfit,Inter,sans-serif;font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;padding:14px 28px;">Ready to start your journey?</a>
   </td></tr>
 
   <!-- Footer -->
@@ -618,7 +618,17 @@ serve(async (req) => {
     }
 
     // Generate HTML email
-    const html = buildEmail(email, profileType, scores, auditData)
+    let html: string
+    try {
+      html = buildEmail(email, profileType, scores, auditData)
+    } catch (emailErr) {
+      console.error('buildEmail threw:', emailErr)
+      html = `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:32px;">
+        <h2>Your Recovery Plan — Mind Sovereignty</h2>
+        <p>Thank you for completing the quiz. Your personalised recovery plan is attached.</p>
+        <p>Use our <a href="https://dopamine-heroo.vercel.app/tools">tools page</a> to get started.</p>
+      </body></html>`
+    }
 
     // Generate PDF — gracefully degrade if it fails
     let attachments: unknown[] = []

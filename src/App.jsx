@@ -19,23 +19,27 @@ export default function App() {
   const [pendingGoal, setPendingGoal] = useState(null)
 
   // Called by ResultsScreen "START MY PROTOCOL" button
+  // Returns an error string on failure, null on success
   async function handleStartProtocol(goal) {
     if (session) {
       // Already logged in — skip auth modal
-      await startJourney(session.user.email, goal, session.user.id)
+      const { error } = await startJourney(session.user.email, goal, session.user.id)
+      if (error) return error.message ?? 'Something went wrong starting your journey.'
       setQuizOpen(false)
       navigate('/dashboard')
     } else {
       setPendingGoal(goal)
       setAuthOpen(true)
     }
+    return null
   }
 
   // Called by AuthModal after a successful signup that produced a live session
   async function handleSignUpSuccess(user) {
     setAuthOpen(false)
     if (pendingGoal !== null) {
-      await startJourney(user.email, pendingGoal, user.id)
+      const { error } = await startJourney(user.email, pendingGoal, user.id)
+      if (error) console.error('startJourney after signup failed:', error)
       setPendingGoal(null)
       setQuizOpen(false)
     }

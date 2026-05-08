@@ -661,12 +661,14 @@ export default function QuizModal({ isOpen, onClose, onStartProtocol }) {
    RESULTS SCREEN
 ───────────────────────────────────────────────────────────────────────────── */
 function ResultsScreen({ answers, scores, refNum, onStartProtocol, onRetake }) {
-  const [launching, setLaunching] = useState(false)
+  const [launching,    setLaunching]    = useState(false)
+  const [protocolError, setProtocolError] = useState(null)
 
   async function handleProtocol() {
     setLaunching(true)
-    await onStartProtocol(answers.interests)
-    // If auth modal opens, launching state doesn't matter — modal takes over
+    setProtocolError(null)
+    const err = await onStartProtocol(answers.interests)
+    if (err) setProtocolError(err)
     setLaunching(false)
   }
 
@@ -784,6 +786,9 @@ function ResultsScreen({ answers, scores, refNum, onStartProtocol, onRetake }) {
         >
           {launching ? 'Loading…' : 'Start My Protocol'}
         </button>
+        {protocolError && (
+          <p className="text-xs text-red-400 font-light">{protocolError}</p>
+        )}
       </div>
 
       {/* Retake */}

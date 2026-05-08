@@ -3,10 +3,10 @@
    Imported by: start-journey (Day 0) and process-daily-emails (Days 1–28).
 ───────────────────────────────────────────────────────────────────────────── */
 
-const TOOLS_URL    = 'https://dopaminerevival.com/tools'
-const SITE_URL     = 'https://dopaminerevival.com'
-const DASHBOARD_URL = 'https://dopaminerevival.com/dashboard'
-const FROM_ADDRESS = 'Mind Sovereignty <hello@dopaminerevival.com>'
+const TOOLS_URL     = 'https://dopamine-heroo.vercel.app/tools'
+const SITE_URL      = 'https://dopamine-heroo.vercel.app'
+const DASHBOARD_URL = 'https://dopamine-heroo.vercel.app/dashboard'
+const FROM_ADDRESS  = 'Mind Sovereignty <hello@dopaminerevival.com>'
 
 export { FROM_ADDRESS }
 
