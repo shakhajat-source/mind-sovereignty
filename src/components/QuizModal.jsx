@@ -5,6 +5,7 @@ import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import { supabase } from '../lib/supabase'
+import { startJourney } from '../lib/journeys'
 
 /* ─────────────────────────────────────────────────────────────────────────────
    STEP MAP
@@ -693,6 +694,7 @@ export default function QuizModal({ isOpen, onClose }) {
                 />
               )}
 
+
             </motion.div>
           </AnimatePresence>
         </div>
@@ -709,6 +711,14 @@ function ResultsScreen({
   email, setEmail, newsletter, setNewsletter,
   emailSent, saving, onEmailSubmit, onRetake,
 }) {
+  const [journeyState, setJourneyState] = useState('idle') // 'idle' | 'loading' | 'done' | 'error'
+
+  async function handleStartJourney() {
+    setJourneyState('loading')
+    const { error } = await startJourney(email, answers.interests)
+    setJourneyState(error ? 'error' : 'done')
+  }
+
   const today = new Date().toLocaleDateString('en-GB', {
     day: 'numeric', month: 'long', year: 'numeric',
   })
@@ -848,12 +858,46 @@ function ResultsScreen({
             </label>
           </form>
         ) : (
-          <div className="bg-[#1A1A1A] px-6 py-5 space-y-1">
-            <p className="text-base font-display font-bold text-white">Your plan is on its way.</p>
-            <p className="text-xs text-white/55 font-light leading-relaxed">
-              Check your inbox for your personalised 4-week recovery plan. It includes a full breakdown of your
-              results and a practical week-by-week guide to get started.
-            </p>
+          <div className="space-y-4">
+            {/* Confirmation */}
+            <div className="bg-[#1A1A1A] px-6 py-5 space-y-1">
+              <p className="text-base font-display font-bold text-white">Your plan is on its way.</p>
+              <p className="text-xs text-white/55 font-light leading-relaxed">
+                Check your inbox for your personalised 4-week recovery plan. It includes a full breakdown of your
+                results and a practical week-by-week guide to get started.
+              </p>
+            </div>
+
+            {/* Start Journey CTA */}
+            {journeyState !== 'done' ? (
+              <div className="border border-neutral-200 px-6 py-5 space-y-3">
+                <p className="text-sm font-semibold text-neutral-900">Ready to start your 28-day journey?</p>
+                <p className="text-xs text-neutral-500 leading-relaxed">
+                  We'll send you a check-in email every few days to keep you on track. No extra sign-up needed.
+                </p>
+                <button
+                  onClick={handleStartJourney}
+                  disabled={journeyState === 'loading'}
+                  className={[
+                    'w-full bg-emerald-600 text-white text-xs font-bold tracking-widest uppercase py-3.5',
+                    'hover:bg-emerald-700 transition-colors',
+                    journeyState === 'loading' ? 'opacity-50 cursor-not-allowed' : '',
+                  ].join(' ')}
+                >
+                  {journeyState === 'loading' ? 'Starting…' : 'Start My Journey'}
+                </button>
+                {journeyState === 'error' && (
+                  <p className="text-xs text-red-500">Something went wrong — please try again.</p>
+                )}
+              </div>
+            ) : (
+              <div className="border border-emerald-200 bg-emerald-50 px-6 py-5">
+                <p className="text-sm font-semibold text-emerald-800">You're in. Day 1 email coming tomorrow.</p>
+                <p className="text-xs text-emerald-700 mt-1 leading-relaxed">
+                  Check in every few days — we'll be with you for the full 28.
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>
