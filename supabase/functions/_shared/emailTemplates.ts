@@ -104,7 +104,7 @@ export function buildEmailHtml(params: {
   subject:    string
   bodyText:   string
   goal:       string | null
-  ctaButton?: { text: string; url: string }
+  ctaButton?: { text: string; url: string; description?: string }
 }): string {
   const { day, subject, bodyText, goal, ctaButton } = params
   const year     = new Date().getFullYear()
@@ -131,14 +131,22 @@ export function buildEmailHtml(params: {
   </td></tr>` : ''
 
   const ctaRow = ctaButton ? `
-  <tr><td style="padding:28px 48px 36px;background:#2c2c2c;">
-    <p style="margin:0 0 16px;font-size:13px;color:rgba(255,255,255,0.6);font-family:Inter,sans-serif;line-height:1.6;">
-      ${day === 0 ? 'Your tools and resources are ready when you are.' : 'Need support staying on track?'}
+  <tr><td style="padding:32px 48px 40px;background:#1a1a1a;">
+    <p style="margin:0 0 20px;font-size:13px;color:rgba(255,255,255,0.55);font-family:Inter,sans-serif;line-height:1.6;">
+      ${day === 0 ? 'Your 28-day programme starts now.' : 'Need support staying on track?'}
     </p>
-    <a href="${ctaButton.url}"
-       style="display:inline-block;background:#5c8260;color:#fff;font-family:Inter,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;padding:14px 28px;">
-      ${ctaButton.text}
-    </a>
+    <table cellpadding="0" cellspacing="0" style="width:100%;">
+      <tr><td>
+        <a href="${ctaButton.url}"
+           style="display:inline-block;background:#10b981;color:#000;font-family:Inter,sans-serif;font-size:12px;font-weight:900;letter-spacing:0.14em;text-transform:uppercase;text-decoration:none;padding:16px 36px;">
+          ${ctaButton.text}
+        </a>
+      </td></tr>
+    </table>
+    ${ctaButton.description ? `
+    <p style="margin:18px 0 0;font-size:12px;color:rgba(255,255,255,0.38);font-family:Inter,sans-serif;line-height:1.7;">
+      ${ctaButton.description}
+    </p>` : ''}
   </td></tr>` : ''
 
   return `<!DOCTYPE html>

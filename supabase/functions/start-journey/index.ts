@@ -3,9 +3,10 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
   DAY_0,
   buildEmailHtml,
-  DASHBOARD_URL,
   FROM,
 } from '../_shared/emailTemplates.ts'
+
+const SIGNUP_URL = 'https://dopamine-heroo.vercel.app/signup'
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
@@ -76,8 +77,9 @@ serve(async (req) => {
     bodyText: DAY_0.body(goal),
     goal,
     ctaButton: {
-      text: "Ready to start your journey?",
-      url:  DASHBOARD_URL,
+      text:        'Begin My Recovery',
+      url:         SIGNUP_URL,
+      description: 'Join our 4-week email programme and receive guided, tailored advice to redefine your relationship with your phone over the next 4 weeks.',
     },
   })
 
