@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Routes, Route, useNavigate } from 'react-router-dom'
 import { useAuth } from './context/AuthProvider'
-import { startJourney } from './lib/journeys'
 import Navbar from './components/Navbar'
 import Hero from './components/Hero'
 import QuizModal from './components/QuizModal'
@@ -9,46 +8,18 @@ import AuthModal from './components/AuthModal'
 import ProtectedRoute from './components/ProtectedRoute'
 import ToolsPage from './pages/ToolsPage'
 import Dashboard from './pages/Dashboard'
+import SignupPage from './pages/SignupPage'
 
 export default function App() {
-  const navigate        = useNavigate()
-  const { session }     = useAuth()
+  const navigate    = useNavigate()
+  const { session } = useAuth()
   const [quizOpen, setQuizOpen] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
-  // goal string from the quiz, held until auth completes
-  const [pendingGoal, setPendingGoal] = useState(null)
 
-  // Called by ResultsScreen "START MY PROTOCOL" button
-  // Returns an error string on failure, null on success
-  async function handleStartProtocol(goal) {
-    if (session) {
-      // Already logged in — skip auth modal
-      const { error } = await startJourney(session.user.email, goal, session.user.id)
-      if (error) return error.message ?? 'Something went wrong starting your journey.'
-      setQuizOpen(false)
-      navigate('/dashboard')
-    } else {
-      setPendingGoal(goal)
-      setAuthOpen(true)
-    }
-    return null
-  }
-
-  // Called by AuthModal after a successful signup that produced a live session
-  async function handleSignUpSuccess(user) {
+  // After a successful login/signup via the Navbar modal, go to the dashboard
+  function handleSignUpSuccess() {
     setAuthOpen(false)
-    if (pendingGoal !== null) {
-      const { error } = await startJourney(user.email, pendingGoal, user.id)
-      if (error) console.error('startJourney after signup failed:', error)
-      setPendingGoal(null)
-      setQuizOpen(false)
-    }
     navigate('/dashboard')
-  }
-
-  function closeAuth() {
-    setAuthOpen(false)
-    setPendingGoal(null)
   }
 
   return (
@@ -111,6 +82,8 @@ export default function App() {
 
         <Route path="/tools" element={<ToolsPage />} />
 
+        <Route path="/signup" element={<SignupPage />} />
+
         <Route path="/dashboard" element={
           <ProtectedRoute>
             <Dashboard />
@@ -124,14 +97,10 @@ export default function App() {
         </p>
       </footer>
 
-      <QuizModal
-        isOpen={quizOpen}
-        onClose={() => setQuizOpen(false)}
-        onStartProtocol={handleStartProtocol}
-      />
+      <QuizModal isOpen={quizOpen} onClose={() => setQuizOpen(false)} />
       <AuthModal
         isOpen={authOpen}
-        onClose={closeAuth}
+        onClose={() => setAuthOpen(false)}
         onSignUpSuccess={handleSignUpSuccess}
       />
     </div>

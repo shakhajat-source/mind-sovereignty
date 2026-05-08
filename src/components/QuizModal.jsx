@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
 } from 'recharts'
+import { startJourney } from '../lib/journeys'
 
 /* ─────────────────────────────────────────────────────────────────────────────
    STEP MAP
@@ -269,7 +271,7 @@ const STEP_VARIANTS = {
 /* ─────────────────────────────────────────────────────────────────────────────
    COMPONENT
 ───────────────────────────────────────────────────────────────────────────── */
-export default function QuizModal({ isOpen, onClose, onStartProtocol }) {
+export default function QuizModal({ isOpen, onClose }) {
   const [step,    setStep]    = useState(0)
   const [dir,     setDir]     = useState(1)
   const [answers, setAnswers] = useState(initAnswers)
@@ -641,7 +643,7 @@ export default function QuizModal({ isOpen, onClose, onStartProtocol }) {
                   answers={answers}
                   scores={scores}
                   refNum={refNum}
-                  onStartProtocol={onStartProtocol}
+                  onClose={onClose}
                   onRetake={() => {
                     setDir(-1); setStep(0); setAnswers(initAnswers())
                   }}
@@ -660,16 +662,23 @@ export default function QuizModal({ isOpen, onClose, onStartProtocol }) {
 /* ─────────────────────────────────────────────────────────────────────────────
    RESULTS SCREEN
 ───────────────────────────────────────────────────────────────────────────── */
-function ResultsScreen({ answers, scores, refNum, onStartProtocol, onRetake }) {
-  const [launching,    setLaunching]    = useState(false)
-  const [protocolError, setProtocolError] = useState(null)
+function ResultsScreen({ answers, scores, refNum, onRetake, onClose }) {
+  const navigate = useNavigate()
+  const [planEmail,  setPlanEmail]  = useState('')
+  const [planStatus, setPlanStatus] = useState('idle') // 'idle' | 'loading' | 'success' | 'error'
+  const [planError,  setPlanError]  = useState(null)
 
-  async function handleProtocol() {
-    setLaunching(true)
-    setProtocolError(null)
-    const err = await onStartProtocol(answers.interests)
-    if (err) setProtocolError(err)
-    setLaunching(false)
+  async function handleRevivalPlan() {
+    if (!planEmail.trim()) return
+    setPlanStatus('loading')
+    setPlanError(null)
+    const { error } = await startJourney(planEmail.trim().toLowerCase(), answers.interests)
+    if (error) {
+      setPlanStatus('error')
+      setPlanError(error.message ?? 'Something went wrong. Please try again.')
+    } else {
+      setPlanStatus('success')
+    }
   }
 
   const today = new Date().toLocaleDateString('en-GB', {
@@ -761,35 +770,83 @@ function ResultsScreen({ answers, scores, refNum, onStartProtocol, onRetake }) {
         </div>
       )}
 
-      {/* START MY PROTOCOL */}
-      <div className="bg-black px-10 py-9 space-y-5">
-        <div>
-          <p className="text-[10px] tracking-[0.3em] uppercase text-[#10b981] font-bold mb-2">
-            28-Day Recovery Protocol
-          </p>
-          <h3 className="text-2xl font-black text-white tracking-tight leading-snug">
-            Ready to take back control?
-          </h3>
-          <p className="text-xs text-neutral-500 font-light mt-2 leading-relaxed">
-            Create your account to lock in your personalised protocol. We'll guide you through
-            the full 28 days with targeted check-ins — no willpower required.
-          </p>
+      {/* CTA — email capture or success state */}
+      {planStatus !== 'success' ? (
+        <div className="bg-black px-10 py-9 space-y-5">
+          <div>
+            <p className="text-[10px] tracking-[0.3em] uppercase text-[#10b981] font-bold mb-2">
+              28-Day Recovery Protocol
+            </p>
+            <h3 className="text-2xl font-black text-white tracking-tight leading-snug">
+              Ready to take back control?
+            </h3>
+            <p className="text-xs text-neutral-500 font-light mt-2 leading-relaxed">
+              Enter your email to receive your personalised revival plan and begin your 28-day programme.
+            </p>
+          </div>
+          <div className="space-y-3">
+            <input
+              type="email"
+              value={planEmail}
+              onChange={e => setPlanEmail(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleRevivalPlan()}
+              placeholder="your@email.com"
+              className="w-full bg-neutral-900 border border-neutral-800 text-white text-sm font-light
+                         px-4 py-3.5 outline-none focus:border-[#10b981] transition-colors
+                         placeholder-neutral-600"
+            />
+            <button
+              onClick={handleRevivalPlan}
+              disabled={planStatus === 'loading' || !planEmail.trim()}
+              className={[
+                'w-full bg-[#10b981] text-white font-black text-sm tracking-[0.15em] uppercase py-4',
+                'transition-opacity hover:opacity-90',
+                (planStatus === 'loading' || !planEmail.trim()) ? 'opacity-50 cursor-not-allowed' : '',
+              ].join(' ')}
+            >
+              {planStatus === 'loading' ? 'Sending…' : 'Receive My Revival Plan'}
+            </button>
+            {planStatus === 'error' && planError && (
+              <p className="text-xs text-red-400 font-light">{planError}</p>
+            )}
+          </div>
         </div>
-        <button
-          onClick={handleProtocol}
-          disabled={launching}
-          className={[
-            'w-full bg-[#10b981] text-white font-black text-sm tracking-[0.2em] uppercase py-5',
-            'transition-opacity hover:opacity-90',
-            launching ? 'opacity-50 cursor-not-allowed' : '',
-          ].join(' ')}
-        >
-          {launching ? 'Loading…' : 'Start My Protocol'}
-        </button>
-        {protocolError && (
-          <p className="text-xs text-red-400 font-light">{protocolError}</p>
-        )}
-      </div>
+      ) : (
+        <div className="bg-black px-10 py-10 space-y-7">
+          {/* Check mark */}
+          <div className="flex items-center gap-3">
+            <div className="w-7 h-7 rounded-full bg-[#10b981] flex items-center justify-center flex-shrink-0">
+              <svg width="13" height="10" viewBox="0 0 13 10" fill="none">
+                <path d="M1.5 5L5 8.5L11.5 1.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <p className="text-[10px] tracking-[0.3em] uppercase text-[#10b981] font-bold">
+              Revival Plan Sent
+            </p>
+          </div>
+
+          {/* Title + subtitle */}
+          <div className="space-y-3">
+            <h3 className="text-2xl font-black text-white tracking-tight leading-snug">
+              You're on the path to improving your relationship with your phone forever.
+            </h3>
+            <p className="text-sm text-neutral-400 font-light leading-relaxed">
+              Click the link in your inbox to begin your recovery. You will now receive an email
+              with starting instructions for your programme.
+            </p>
+          </div>
+
+          {/* Account CTA */}
+          <button
+            onClick={() => { onClose(); navigate('/signup') }}
+            className="w-full border border-[#10b981] text-[#10b981] font-bold text-xs
+                       tracking-[0.1em] uppercase py-4 leading-tight
+                       hover:bg-[#10b981] hover:text-black transition-all duration-150"
+          >
+            Create an account to access our AI coach and monitor progress
+          </button>
+        </div>
+      )}
 
       {/* Retake */}
       <div className="px-10 py-7">
