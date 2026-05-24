@@ -6,7 +6,7 @@
 const TOOLS_URL     = 'https://dopamine-heroo.vercel.app/tools'
 const SITE_URL      = 'https://dopamine-heroo.vercel.app'
 const DASHBOARD_URL = 'https://dopamine-heroo.vercel.app/dashboard'
-const FROM_ADDRESS  = 'Mind Sovereignty <hello@dopaminerevival.com>'
+const FROM_ADDRESS  = 'Mind Sovereignty <onboarding@resend.dev>'
 
 export { FROM_ADDRESS }
 
